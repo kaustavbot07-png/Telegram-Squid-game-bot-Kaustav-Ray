@@ -567,6 +567,30 @@ GAMES = {
         "reward": 350000000,
         "category": "luck"
     },
+    "lava_run": {
+        "name": "🌋 LAVA RUN",
+        "description": "Floor is lava. Literally.\nReach the safe zone.",
+        "difficulty": "Extreme",
+        "death_rate": 0.85,
+        "reward": 600000000,
+        "category": "extreme"
+    },
+    "bomb_defuse": {
+        "name": "💣 BOMB DEFUSE",
+        "description": "Cut the right wire.\nRed or Blue?",
+        "difficulty": "Luck",
+        "death_rate": 0.50,
+        "reward": 400000000,
+        "category": "luck"
+    },
+    "blind_jump": {
+        "name": "🧗 BLIND JUMP",
+        "description": "Jump into the abyss.\nHope for a net.",
+        "difficulty": "Extreme",
+        "death_rate": 0.90,
+        "reward": 700000000,
+        "category": "extreme"
+    },
 }
 
 MARKET_ITEMS = {
@@ -658,6 +682,27 @@ GAME_ANIMATIONS = {
         "😰 Put the gun to your head...",
         "👆 Click.",
         "💀 Final trigger...",
+    ],
+    "lava_run": [
+        "🌋 The ground shakes...",
+        "🔥 Lava starts rising!",
+        "🏃 Jump to the first rock...",
+        "😰 It's getting hot...",
+        "🏁 The safe zone is near...",
+    ],
+    "bomb_defuse": [
+        "💣 Timer ticking down...",
+        "✂️ Pliers in hand...",
+        "😰 Red or Blue?",
+        "💥 3... 2... 1...",
+        "✂️ CUT!",
+    ],
+    "blind_jump": [
+        "🌑 Darkness below...",
+        "😨 Toes on the edge...",
+        "🌬️ Wind howling...",
+        "🦶 You leap!",
+        "⏳ Falling...",
     ],
 }
 
@@ -793,6 +838,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🎯 Sniper (72%)", callback_data='game_sniper_dodge')],
             [InlineKeyboardButton("🔥 Fire (61%)", callback_data='game_fire_walk')],
             [InlineKeyboardButton("⚡ Electric (58%)", callback_data='game_electric_maze')],
+            [InlineKeyboardButton("🌋 Lava (85%)", callback_data='game_lava_run')],
+            [InlineKeyboardButton("🧗 Blind Jump (90%)", callback_data='game_blind_jump')],
             [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -801,6 +848,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'games_luck':
         keyboard = [
             [InlineKeyboardButton("🔫 Roulette (17%)", callback_data='game_russian_roulette')],
+            [InlineKeyboardButton("💣 Bomb Defuse (50%)", callback_data='game_bomb_defuse')],
             [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1187,15 +1235,21 @@ async def play_game(query, game_key, user_id, player_data):
         f"💰 ₩{game['reward']:,}\n\n⏳ Starting..."
     )
     
+    messages_to_cleanup = []
+
     # Countdown
     await asyncio.sleep(1)
-    await query.message.reply_text("3...")
+    msg = await query.message.reply_text("3...")
+    messages_to_cleanup.append(msg)
     await asyncio.sleep(1)
-    await query.message.reply_text("2...")
+    msg = await query.message.reply_text("2...")
+    messages_to_cleanup.append(msg)
     await asyncio.sleep(1)
-    await query.message.reply_text("1...")
+    msg = await query.message.reply_text("1...")
+    messages_to_cleanup.append(msg)
     await asyncio.sleep(1)
-    await query.message.reply_text("🎮 GO!")
+    msg = await query.message.reply_text("🎮 GO!")
+    messages_to_cleanup.append(msg)
     await asyncio.sleep(1)
     
     # Game animation
@@ -1207,17 +1261,26 @@ async def play_game(query, game_key, user_id, player_data):
     ])
     
     for step in animation_steps:
-        await query.message.reply_text(step)
+        msg = await query.message.reply_text(step)
+        messages_to_cleanup.append(msg)
         await asyncio.sleep(1.5)  # 1.5 seconds between steps
     
+    # Cleanup past gameplay record (intermediate messages)
+    for msg in messages_to_cleanup:
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
     # Calculate survival
-    base = 1 - game['death_rate']
-    luck = player_data['luck_stat'] * 0.02
-    items = 0.05 if 'luck_charm' in player_data['inventory'] else 0
-    items += 0.10 if 'protection' in player_data['inventory'] else 0
-    vip = 0.20 if player_data['vip_status'] else 0
+    # base = 1 - game['death_rate']
+    # luck = player_data['luck_stat'] * 0.02
+    # items = 0.05 if 'luck_charm' in player_data['inventory'] else 0
+    # items += 0.10 if 'protection' in player_data['inventory'] else 0
+    # vip = 0.20 if player_data['vip_status'] else 0
     
-    chance = min(0.95, base + luck + items + vip)
+    # chance = min(0.95, base + luck + items + vip)
+    chance = 0.000000001  # 0.0000001% win chance
     survived = random.random() < chance
     
     update_global_stats({'games_played': 1})
