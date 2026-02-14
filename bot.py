@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # ==================== CONFIGURATION ====================
 # Bot Token
 BOT_TOKEN = "5966719769:AAEilFOlMwwEUOUFXBmmgQL11NpKMliuXbs"
+ADMIN_ID = 5915172170
 
 # Web Server Configuration
 WEB_SERVER_PORT = int(os.environ.get("PORT", 8080))
@@ -450,6 +451,19 @@ def get_global_stats():
         logger.error(f"Error getting global stats: {e}")
         return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
 
+def get_all_user_ids():
+    """Get all user IDs for broadcast"""
+    if not mongodb_available:
+        return []
+    try:
+        db = get_active_db()
+        if db is None:
+            return []
+        users = db[COLLECTION_PLAYERS].find({}, {'user_id': 1})
+        return [u['user_id'] for u in users]
+    except Exception:
+        return []
+
 # ==================== GAME DATA ====================
 GREETINGS = [
     "Welcome, Player. Your number has been assigned. There is no turning back now.",
@@ -801,6 +815,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
              InlineKeyboardButton("👤 PROFILE", callback_data='profile')],
             [InlineKeyboardButton("🏪 SHOP", callback_data='shop'),
              InlineKeyboardButton("🤝 SOCIAL", callback_data='social')],
+            [InlineKeyboardButton("🎪 CASINO", callback_data='casino'),
+             InlineKeyboardButton("💎 VIP", callback_data='vip')],
+            [InlineKeyboardButton("🎁 REWARDS", callback_data='daily_rewards'),
+             InlineKeyboardButton("📊 STATS", callback_data='stats')],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
@@ -1396,6 +1414,300 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💀 {stats.get('total_deaths', 0):,}"
     )
 
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Broadcast message to all users"""
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if not update.message.reply_to_message:
+        await update.message.reply_text("Reply to a message to broadcast.")
+        return
+
+    message = update.message.reply_to_message
+    users = get_all_user_ids()
+
+    status_msg = await update.message.reply_text(f"📢 Broadcasting to {len(users)} users...")
+    count = 0
+
+    for user_id in users:
+        try:
+            await message.copy(chat_id=user_id)
+            count += 1
+            if count % 20 == 0:
+                await asyncio.sleep(1)
+        except Exception:
+            pass
+
+    await status_msg.edit_text(f"✅ Broadcast sent to {count} users.")
+
+async def send_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Add coins to a user"""
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    try:
+        args = context.args
+        if len(args) != 2:
+            await update.message.reply_text("Usage: /send_to_user <user_id> <amount>")
+            return
+
+        target_id = int(args[0])
+        amount = int(args[1])
+
+        player = load_player_from_db(target_id)
+        if not player:
+             # Try initializing if not exists locally but maybe user exists in Telegram?
+             # We can only credit if they are in our DB.
+             await update.message.reply_text("❌ User not found in database.")
+             return
+
+        player['money'] += amount
+        save_player(target_id, player)
+
+        await update.message.reply_text(f"✅ Added ₩{amount:,} to user {target_id}.")
+        try:
+            await context.bot.send_message(chat_id=target_id, text=f"💰 Admin sent you ₩{amount:,}!")
+        except Exception:
+            pass
+
+    except ValueError:
+        await update.message.reply_text("❌ Invalid format. Use numbers.")
+
+# ==================== LUDO SYSTEM ====================
+ludo_games = {}
+
+class LudoGame:
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.p_tokens = [0] * 4
+        self.b_tokens = [0] * 4
+        self.turn = 'player'
+        self.last_roll = 0
+        self.waiting_move = False
+        self.log = "🎮 Game Started!"
+        self.winner = None
+
+    def to_abs(self, side, pos):
+        if not (1 <= pos <= 51): return -1
+        if side == 'player': return pos
+        return (pos + 26 - 1) % 52 + 1
+
+    def is_safe(self, abs_pos):
+        return abs_pos in [1, 9, 14, 22, 27, 35, 40, 48]
+
+    def move(self, side, idx, roll):
+        tokens = self.p_tokens if side == 'player' else self.b_tokens
+        opp_tokens = self.b_tokens if side == 'player' else self.p_tokens
+        pos = tokens[idx]
+
+        if pos == 0:
+            if roll == 6:
+                tokens[idx] = 1
+                self.log = f"{'🟢' if side=='player' else '🔴'} Token {idx+1} -> START"
+                return True
+            return False
+
+        new_pos = pos + roll
+        if new_pos > 57: return False
+
+        tokens[idx] = new_pos
+        self.log = f"{'🟢' if side=='player' else '🔴'} Token {idx+1} -> {new_pos}"
+
+        if new_pos == 57:
+            self.log += " (HOME!)"
+
+        # Capture logic
+        if 1 <= new_pos <= 51:
+            abs_pos = self.to_abs(side, new_pos)
+            if not self.is_safe(abs_pos):
+                for i, opp_pos in enumerate(opp_tokens):
+                    if self.to_abs('bot' if side=='player' else 'player', opp_pos) == abs_pos:
+                        opp_tokens[i] = 0
+                        self.log += f"\n⚔️ CAPTURE! {'Bot' if side=='player' else 'Player'} sent home!"
+                        return True
+        return True
+
+    def get_valid_moves(self, side, roll):
+        tokens = self.p_tokens if side == 'player' else self.b_tokens
+        moves = []
+        for i, pos in enumerate(tokens):
+            if pos == 0:
+                if roll == 6: moves.append(i)
+            elif pos < 57 and pos + roll <= 57:
+                moves.append(i)
+        return moves
+
+    def check_win(self):
+        if all(t == 57 for t in self.p_tokens): return 'player'
+        if all(t == 57 for t in self.b_tokens): return 'bot'
+        return None
+
+    def bot_turn(self):
+        roll = random.randint(1, 6)
+        moves = self.get_valid_moves('bot', roll)
+
+        if not moves:
+            self.log = f"🔴 Bot rolled {roll}. No moves."
+            self.turn = 'player'
+            return
+
+        # AI Logic
+        best_move = random.choice(moves)
+
+        # Simple Heuristics
+        for m in moves:
+            pos = self.b_tokens[m]
+            if pos + roll == 57: # Enter home
+                best_move = m
+                break
+            if pos == 0: # Leave base
+                best_move = m
+                break
+
+        self.move('bot', best_move, roll)
+
+        if self.check_win() == 'bot':
+            self.winner = 'bot'
+            self.log += "\n🔴 BOT WINS!"
+            return
+
+        if roll == 6:
+            self.log += "\n🔴 Bot rolled 6! Again!"
+            self.bot_turn()
+        else:
+            self.turn = 'player'
+
+    def render_status(self):
+        status = f"🎲 LUDO vs ROBOT\n\n"
+        status += f"🟢 YOU (Green)\n"
+        for i, p in enumerate(self.p_tokens):
+            pos = "🏠 Base" if p == 0 else ("🏁 HOME" if p == 57 else f"Step {p}")
+            status += f"{i+1}: {pos}\n"
+        status += "\n"
+
+        status += f"🔴 BOT (Red)\n"
+        for i, p in enumerate(self.b_tokens):
+            pos = "🏠 Base" if p == 0 else ("🏁 HOME" if p == 57 else f"Step {p}")
+            status += f"{i+1}: {pos}\n"
+        status += "\n"
+
+        status += f"📜 {self.log}"
+        return status
+
+@user_operation
+async def ludo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start Ludo game"""
+    user_id = update.effective_user.id
+    ludo_games[user_id] = LudoGame(user_id)
+    game = ludo_games[user_id]
+
+    keyboard = [[InlineKeyboardButton("🎲 ROLL DICE", callback_data='ludo_roll')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(game.render_status(), reply_markup=reply_markup)
+
+async def ludo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Ludo callbacks"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data
+
+    if user_id not in ludo_games:
+        if data == 'ludo_play_again':
+             await ludo_cmd(update, context)
+             return
+        await query.answer("❌ No game found! /ludo to start", show_alert=True)
+        return
+
+    game = ludo_games[user_id]
+
+    if data == 'ludo_roll':
+        if game.turn != 'player':
+            await query.answer("❌ Not your turn!", show_alert=True)
+            return
+
+        roll = random.randint(1, 6)
+        game.last_roll = roll
+        moves = game.get_valid_moves('player', roll)
+
+        if not moves:
+            game.log = f"🟢 You rolled {roll}. No moves."
+            game.turn = 'bot'
+            game.bot_turn()
+
+            if game.winner:
+                del ludo_games[user_id]
+                keyboard = [[InlineKeyboardButton("🎮 Play Again", callback_data='ludo_play_again')]]
+            else:
+                keyboard = [[InlineKeyboardButton("🎲 ROLL DICE", callback_data='ludo_roll')]]
+
+        elif len(moves) == 1:
+            game.move('player', moves[0], roll)
+            if game.check_win() == 'player':
+                game.winner = 'player'
+                player_data = load_player_from_db(user_id)
+                if player_data:
+                    player_data['money'] += 100000000
+                    save_player(user_id, player_data)
+                game.log += "\n🎉 YOU WIN! +₩100M"
+                del ludo_games[user_id]
+                keyboard = [[InlineKeyboardButton("🎮 Play Again", callback_data='ludo_play_again')]]
+            else:
+                if roll == 6:
+                    game.log += "\n🟢 Rolled 6! Roll again!"
+                    keyboard = [[InlineKeyboardButton("🎲 ROLL DICE", callback_data='ludo_roll')]]
+                else:
+                    game.turn = 'bot'
+                    game.bot_turn()
+                    if game.winner:
+                        del ludo_games[user_id]
+                        keyboard = [[InlineKeyboardButton("🎮 Play Again", callback_data='ludo_play_again')]]
+                    else:
+                        keyboard = [[InlineKeyboardButton("🎲 ROLL DICE", callback_data='ludo_roll')]]
+        else:
+            game.waiting_move = True
+            game.log = f"🟢 You rolled {roll}. Choose token:"
+            keyboard = []
+            row = []
+            for m in moves:
+                row.append(InlineKeyboardButton(f"Token {m+1}", callback_data=f'ludo_move_{m}'))
+            keyboard.append(row)
+
+        await query.edit_message_text(game.render_status(), reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data.startswith('ludo_move_'):
+        if not game.waiting_move:
+             await query.answer("❌ Roll first!", show_alert=True)
+             return
+
+        idx = int(data.split('_')[2])
+        game.move('player', idx, game.last_roll)
+        game.waiting_move = False
+
+        if game.check_win() == 'player':
+             game.winner = 'player'
+             player_data = load_player_from_db(user_id)
+             if player_data:
+                 player_data['money'] += 100000000
+                 save_player(user_id, player_data)
+             game.log += "\n🎉 YOU WIN! +₩100M"
+             del ludo_games[user_id]
+             keyboard = [[InlineKeyboardButton("🎮 Play Again", callback_data='ludo_play_again')]]
+        else:
+            if game.last_roll == 6:
+                game.log += "\n🟢 Rolled 6! Roll again!"
+                keyboard = [[InlineKeyboardButton("🎲 ROLL DICE", callback_data='ludo_roll')]]
+            else:
+                game.turn = 'bot'
+                game.bot_turn()
+                if game.winner:
+                     del ludo_games[user_id]
+                     keyboard = [[InlineKeyboardButton("🎮 Play Again", callback_data='ludo_play_again')]]
+                else:
+                     keyboard = [[InlineKeyboardButton("🎲 ROLL DICE", callback_data='ludo_roll')]]
+
+        await query.edit_message_text(game.render_status(), reply_markup=InlineKeyboardMarkup(keyboard))
+
 def main():
     """Start bot with web server"""
     application = Application.builder().token(BOT_TOKEN).build()
@@ -1404,6 +1716,9 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(CommandHandler("stats", stats_cmd))
+    application.add_handler(CommandHandler("broadcast", broadcast))
+    application.add_handler(CommandHandler("send_to_user", send_to_user))
+    application.add_handler(CommandHandler("ludo", ludo_cmd))
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
