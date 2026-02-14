@@ -1,0 +1,1379 @@
+# bot.py
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+import random
+import asyncio
+from datetime import datetime, timedelta
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
+import threading
+from functools import wraps
+import time
+from aiohttp import web
+import os
+
+# Enable logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# ==================== CONFIGURATION ====================
+# Bot Token
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+
+# Web Server Configuration
+WEB_SERVER_PORT = int(os.environ.get("PORT", 8080))
+WEB_SERVER_HOST = "0.0.0.0"
+
+# MongoDB URIs (Add your MongoDB connection strings)
+MONGODB_URIS = [
+    os.environ.get("MONGODB_URI_1", "mongodb://localhost:27017/"),
+    os.environ.get("MONGODB_URI_2", "mongodb+srv://user1:pass1@cluster1.mongodb.net/"),
+    os.environ.get("MONGODB_URI_3", "mongodb+srv://user2:pass2@cluster2.mongodb.net/"),
+    os.environ.get("MONGODB_URI_4", "mongodb+srv://user3:pass3@cluster3.mongodb.net/"),
+]
+
+# Database Configuration
+DB_NAME = "squid_game_bot"
+COLLECTION_PLAYERS = "players"
+COLLECTION_GUILDS = "guilds"
+COLLECTION_TOURNAMENTS = "tournaments"
+COLLECTION_GLOBAL_STATS = "global_stats"
+
+# ==================== WEB SERVER FOR UPTIME MONITORING ====================
+class WebServer:
+    def __init__(self):
+        self.app = web.Application()
+        self.setup_routes()
+        self.start_time = datetime.utcnow()
+        self.request_count = 0
+        
+    def setup_routes(self):
+        """Setup web server routes"""
+        self.app.router.add_get('/', self.handle_root)
+        self.app.router.add_get('/health', self.handle_health)
+        self.app.router.add_get('/status', self.handle_status)
+        self.app.router.add_get('/stats', self.handle_stats)
+        self.app.router.add_get('/ping', self.handle_ping)
+    
+    async def handle_root(self, request):
+        """Root endpoint"""
+        self.request_count += 1
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Squid Game Bot</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 50px;
+                    text-align: center;
+                }
+                .container {
+                    background: rgba(0,0,0,0.3);
+                    padding: 40px;
+                    border-radius: 15px;
+                    max-width: 600px;
+                    margin: 0 auto;
+                }
+                h1 { font-size: 3em; margin-bottom: 20px; }
+                .status { color: #00ff00; font-weight: bold; }
+                .info { margin: 20px 0; }
+                a { color: #00ffff; text-decoration: none; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🎭 SQUID GAME BOT</h1>
+                <p class="status">✅ BOT IS RUNNING</p>
+                <div class="info">
+                    <p>📊 <a href="/stats">View Statistics</a></p>
+                    <p>❤️ <a href="/health">Health Check</a></p>
+                    <p>📈 <a href="/status">System Status</a></p>
+                </div>
+                <p>💀 Let the games begin...</p>
+            </div>
+        </body>
+        </html>
+        """
+        return web.Response(text=html_content, content_type='text/html')
+    
+    async def handle_health(self, request):
+        """Health check endpoint for UptimeRobot"""
+        self.request_count += 1
+        return web.json_response({
+            'status': 'healthy',
+            'bot': 'online',
+            'timestamp': datetime.utcnow().isoformat(),
+            'uptime_seconds': (datetime.utcnow() - self.start_time).total_seconds()
+        })
+    
+    async def handle_ping(self, request):
+        """Simple ping endpoint"""
+        self.request_count += 1
+        return web.Response(text='pong')
+    
+    async def handle_status(self, request):
+        """Detailed status endpoint"""
+        self.request_count += 1
+        uptime = datetime.utcnow() - self.start_time
+        
+        return web.json_response({
+            'bot_status': 'running',
+            'uptime': str(uptime),
+            'uptime_seconds': uptime.total_seconds(),
+            'mongodb_connected': mongodb_available,
+            'active_connections': len(db_connections),
+            'requests_served': self.request_count,
+            'cached_players': len(player_cache),
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    
+    async def handle_stats(self, request):
+        """Statistics endpoint"""
+        self.request_count += 1
+        stats = get_global_stats()
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Bot Statistics</title>
+            <meta http-equiv="refresh" content="10">
+            <style>
+                body {{
+                    font-family: 'Courier New', monospace;
+                    background: #0a0a0a;
+                    color: #00ff00;
+                    padding: 20px;
+                }}
+                .stat-box {{
+                    background: #1a1a1a;
+                    border: 2px solid #00ff00;
+                    padding: 20px;
+                    margin: 10px 0;
+                    border-radius: 5px;
+                }}
+                h1 {{ color: #ff0000; text-align: center; }}
+                .value {{ font-size: 2em; font-weight: bold; }}
+            </style>
+        </head>
+        <body>
+            <h1>🎭 SQUID GAME BOT STATISTICS</h1>
+            <div class="stat-box">
+                <p>👥 Total Players</p>
+                <p class="value">{stats.get('total_players', 0):,}</p>
+            </div>
+            <div class="stat-box">
+                <p>🎮 Games Played</p>
+                <p class="value">{stats.get('games_played', 0):,}</p>
+            </div>
+            <div class="stat-box">
+                <p>💀 Total Deaths</p>
+                <p class="value">{stats.get('total_deaths', 0):,}</p>
+            </div>
+            <div class="stat-box">
+                <p>⏰ Last Updated</p>
+                <p>{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+            </div>
+            <p style="text-align:center; margin-top:30px;">Auto-refreshes every 10 seconds</p>
+        </body>
+        </html>
+        """
+        return web.Response(text=html_content, content_type='text/html')
+    
+    async def start(self):
+        """Start web server"""
+        runner = web.AppRunner(self.app)
+        await runner.setup()
+        site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
+        await site.start()
+        logger.info(f"🌐 Web server started on http://{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
+
+# Initialize web server
+web_server = WebServer()
+
+# ==================== MONGODB CONFIGURATION ====================
+db_connections = []
+active_db = None
+db_lock = threading.Lock()
+
+def init_mongodb():
+    """Initialize MongoDB connections with fallback"""
+    global db_connections, active_db
+    
+    for uri in MONGODB_URIS:
+        try:
+            client = MongoClient(
+                uri,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=10000,
+                socketTimeoutMS=10000,
+                maxPoolSize=50,
+                minPoolSize=10,
+                retryWrites=True,
+                w='majority'
+            )
+            client.admin.command('ping')
+            db = client[DB_NAME]
+            db_connections.append(db)
+            logger.info(f"✅ MongoDB connected: {uri[:30]}...")
+            
+            if active_db is None:
+                active_db = db
+                logger.info(f"✅ Active database set")
+                
+        except ConnectionFailure as e:
+            logger.warning(f"❌ MongoDB failed: {uri[:30]}...")
+            continue
+    
+    if not db_connections:
+        logger.error("❌ No MongoDB connections! Using in-memory storage.")
+        return False
+    
+    try:
+        active_db[COLLECTION_PLAYERS].create_index("user_id", unique=True)
+        active_db[COLLECTION_PLAYERS].create_index("money")
+        active_db[COLLECTION_PLAYERS].create_index("games_survived")
+        active_db[COLLECTION_PLAYERS].create_index("win_streak")
+        logger.info("✅ Database indexes created")
+    except Exception as e:
+        logger.error(f"❌ Error creating indexes: {e}")
+    
+    return True
+
+def get_active_db():
+    """Get active database with automatic failover"""
+    global active_db, db_connections
+    
+    with db_lock:
+        if active_db is not None:
+            try:
+                active_db.command('ping')
+                return active_db
+            except Exception:
+                logger.warning("⚠️ Active DB lost, switching...")
+        
+        for db in db_connections:
+            try:
+                db.command('ping')
+                active_db = db
+                logger.info("✅ Switched to backup database")
+                return active_db
+            except Exception:
+                continue
+        
+        logger.error("❌ All databases failed!")
+        return None
+
+mongodb_available = init_mongodb()
+
+# ==================== CACHING & PROTECTION ====================
+player_cache = {}
+cache_lock = threading.Lock()
+CACHE_TIMEOUT = 300
+
+button_clicks = {}
+button_click_lock = threading.Lock()
+BUTTON_COOLDOWN = 2
+
+user_locks = {}
+user_lock_manager = threading.Lock()
+
+def get_user_lock(user_id):
+    """Get or create lock for specific user"""
+    with user_lock_manager:
+        if user_id not in user_locks:
+            user_locks[user_id] = asyncio.Lock()
+        return user_locks[user_id]
+
+def check_button_cooldown(user_id, callback_data):
+    """Check if user can click this button"""
+    with button_click_lock:
+        key = f"{user_id}_{callback_data}"
+        current_time = time.time()
+        
+        if key in button_clicks:
+            last_click = button_clicks[key]
+            if current_time - last_click < BUTTON_COOLDOWN:
+                return False
+        
+        button_clicks[key] = current_time
+        
+        keys_to_delete = [k for k, v in button_clicks.items() if current_time - v > BUTTON_COOLDOWN * 2]
+        for k in keys_to_delete:
+            del button_clicks[k]
+        
+        return True
+
+def user_operation(func):
+    """Decorator to ensure only one operation per user"""
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        if update.callback_query:
+            user_id = update.callback_query.from_user.id
+        else:
+            user_id = update.effective_user.id
+        
+        user_lock = get_user_lock(user_id)
+        
+        if user_lock.locked():
+            if update.callback_query:
+                await update.callback_query.answer(
+                    "⏳ Please wait, processing...",
+                    show_alert=True
+                )
+            return
+        
+        async with user_lock:
+            return await func(update, context, *args, **kwargs)
+    
+    return wrapper
+
+# ==================== DATABASE OPERATIONS ====================
+def save_player_to_db(user_id, player_data):
+    """Save player data to MongoDB"""
+    if not mongodb_available:
+        return
+    
+    try:
+        db = get_active_db()
+        if db is None:
+            return
+        
+        player_data_copy = player_data.copy()
+        player_data_copy['user_id'] = user_id
+        player_data_copy['last_updated'] = datetime.utcnow()
+        
+        db[COLLECTION_PLAYERS].update_one(
+            {'user_id': user_id},
+            {'$set': player_data_copy},
+            upsert=True
+        )
+        
+        with cache_lock:
+            player_cache[user_id] = {
+                'data': player_data_copy,
+                'timestamp': time.time()
+            }
+        
+    except Exception as e:
+        logger.error(f"Error saving player {user_id}: {e}")
+
+def load_player_from_db(user_id):
+    """Load player data from MongoDB with caching"""
+    with cache_lock:
+        if user_id in player_cache:
+            cached = player_cache[user_id]
+            if time.time() - cached['timestamp'] < CACHE_TIMEOUT:
+                return cached['data']
+    
+    if not mongodb_available:
+        return None
+    
+    try:
+        db = get_active_db()
+        if db is None:
+            return None
+        
+        player_data = db[COLLECTION_PLAYERS].find_one({'user_id': user_id})
+        
+        if player_data:
+            with cache_lock:
+                player_cache[user_id] = {
+                    'data': player_data,
+                    'timestamp': time.time()
+                }
+            return player_data
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error loading player {user_id}: {e}")
+        return None
+
+def get_leaderboard(sort_field, limit=10):
+    """Get leaderboard from database"""
+    if not mongodb_available:
+        return []
+    
+    try:
+        db = get_active_db()
+        if db is None:
+            return []
+        
+        players = db[COLLECTION_PLAYERS].find().sort(sort_field, -1).limit(limit)
+        return list(players)
+        
+    except Exception as e:
+        logger.error(f"Error getting leaderboard: {e}")
+        return []
+
+def update_global_stats(stats_update):
+    """Update global statistics"""
+    if not mongodb_available:
+        return
+    
+    try:
+        db = get_active_db()
+        if db is None:
+            return
+        
+        db[COLLECTION_GLOBAL_STATS].update_one(
+            {'_id': 'global'},
+            {'$inc': stats_update, '$set': {'last_updated': datetime.utcnow()}},
+            upsert=True
+        )
+        
+    except Exception as e:
+        logger.error(f"Error updating global stats: {e}")
+
+def get_global_stats():
+    """Get global statistics"""
+    if not mongodb_available:
+        return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
+    
+    try:
+        db = get_active_db()
+        if db is None:
+            return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
+        
+        stats = db[COLLECTION_GLOBAL_STATS].find_one({'_id': 'global'})
+        if stats:
+            return stats
+        return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
+        
+    except Exception as e:
+        logger.error(f"Error getting global stats: {e}")
+        return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
+
+# ==================== GAME DATA ====================
+GREETINGS = [
+    "Welcome, Player. Your number has been assigned. There is no turning back now.",
+    "Another player arrives. How unfortunate for you.",
+    "You have entered the game. Leaving is... not an option.",
+    "Silence. The games will begin shortly.",
+    "So, you've come for the money. Many have tried. Few survive.",
+]
+
+THREATS = [
+    "You will follow the rules, or you will be eliminated.",
+    "Every word you speak could be your last.",
+    "The guards are watching. Always watching.",
+    "One wrong move and you're out. Permanently.",
+]
+
+TAUNTS = [
+    "Are you scared? You should be.",
+    "Your hands are trembling.",
+    "How many of your friends have died already?",
+    "The prize is 45.6 billion won. Is your life worth it?",
+]
+
+ELIMINATIONS = [
+    "💀 ELIMINATED. Remove the body.",
+    "💀 Player eliminated. Next.",
+    "💀 You have failed. Guards, proceed.",
+    "💀 Game over. Forever.",
+]
+
+SURVIVAL_MESSAGES = [
+    "You survived... this time.",
+    "Impressive. But luck runs out eventually.",
+    "You live another day.",
+]
+
+GAMES = {
+    "red_light": {
+        "name": "🟢🔴 RED LIGHT, GREEN LIGHT",
+        "description": "Run to finish in 5 minutes.\nStop when doll turns.\n🎵 Mugunghwa kkoci pieot seumnida...",
+        "difficulty": "Easy",
+        "death_rate": 0.35,
+        "reward": 100000000,
+        "category": "classic"
+    },
+    "dalgona": {
+        "name": "🍬 DALGONA CANDY",
+        "description": "Carve shape from honeycomb.\nDon't break it. 10 minutes.",
+        "difficulty": "Medium",
+        "death_rate": 0.40,
+        "reward": 150000000,
+        "category": "classic"
+    },
+    "tug_of_war": {
+        "name": "🪢 TUG OF WAR",
+        "description": "Two teams. One rope. Deadly drop.",
+        "difficulty": "Hard",
+        "death_rate": 0.50,
+        "reward": 200000000,
+        "category": "classic"
+    },
+    "marbles": {
+        "name": "⚪ MARBLES",
+        "description": "Win all 10 marbles from partner.\nLoser dies.",
+        "difficulty": "Mental",
+        "death_rate": 0.50,
+        "reward": 250000000,
+        "category": "classic"
+    },
+    "glass_bridge": {
+        "name": "🌉 GLASS STEPPING STONES",
+        "description": "18 pairs of glass. Tempered vs regular.\nGuess wrong = death.",
+        "difficulty": "Extreme",
+        "death_rate": 0.65,
+        "reward": 300000000,
+        "category": "classic"
+    },
+    "squid_game": {
+        "name": "🦑 SQUID GAME",
+        "description": "Final game. Two players.\nFight to death.",
+        "difficulty": "Final",
+        "death_rate": 0.50,
+        "reward": 500000000,
+        "category": "classic"
+    },
+    "sniper_dodge": {
+        "name": "🎯 SNIPER DODGE",
+        "description": "Cross 100m while snipers shoot.\nOne hit = death.",
+        "difficulty": "Insane",
+        "death_rate": 0.72,
+        "reward": 450000000,
+        "category": "extreme"
+    },
+    "fire_walk": {
+        "name": "🔥 FIRE WALK",
+        "description": "Walk 20m through flames.\n30 seconds max.",
+        "difficulty": "Extreme",
+        "death_rate": 0.61,
+        "reward": 340000000,
+        "category": "extreme"
+    },
+    "electric_maze": {
+        "name": "⚡ ELECTRIC MAZE",
+        "description": "Metal maze. Random shocks.\n5 minutes.",
+        "difficulty": "Deadly",
+        "death_rate": 0.58,
+        "reward": 320000000,
+        "category": "extreme"
+    },
+    "russian_roulette": {
+        "name": "🔫 RUSSIAN ROULETTE",
+        "description": "Six chambers. One bullet.\nPure luck.",
+        "difficulty": "Extreme",
+        "death_rate": 0.17,
+        "reward": 350000000,
+        "category": "luck"
+    },
+}
+
+MARKET_ITEMS = {
+    "food": {"name": "🍞 Food", "price": 10000000, "effect": "hunger", "desc": "Restore energy"},
+    "medicine": {"name": "💊 Medicine", "price": 50000000, "effect": "health", "desc": "Heal injuries"},
+    "weapon": {"name": "🔪 Weapon", "price": 100000000, "effect": "strength+2", "desc": "+2 Strength"},
+    "protection": {"name": "🛡️ Armor", "price": 200000000, "effect": "protection", "desc": "-10% death"},
+    "luck_charm": {"name": "🎰 Lucky Charm", "price": 300000000, "effect": "luck+2", "desc": "+2 Luck"},
+    "revive_token": {"name": "💉 Revive", "price": 500000000, "effect": "revive", "desc": "Auto-revive"},
+    "shield": {"name": "🛡️ Shield", "price": 450000000, "effect": "block", "desc": "Block death"},
+    "double_reward": {"name": "💎 2x Reward", "price": 300000000, "effect": "2x", "desc": "Double reward"},
+}
+
+ACHIEVEMENTS = {
+    "first_blood": {"name": "🏆 First Blood", "desc": "Survive first game", "reward": 50000000},
+    "survivor": {"name": "💀 Survivor", "desc": "Survive 5 games", "reward": 100000000},
+    "veteran": {"name": "👑 Veteran", "desc": "Survive 10 games", "reward": 200000000},
+    "rich": {"name": "💰 Millionaire", "desc": "Earn ₩1B", "reward": 100000000},
+}
+
+# ==================== GAME ANIMATIONS ====================
+GAME_ANIMATIONS = {
+    "red_light": [
+        "🟢 GREEN LIGHT! You run...",
+        "🔴 RED LIGHT! FREEZE!",
+        "🟢 GREEN! Sprinting...",
+        "🔴 STOP! The doll turns...",
+        "🟢 Almost there...",
+    ],
+    "dalgona": [
+        "🍬 You start carving the honeycomb...",
+        "🔨 Tapping gently...",
+        "⏳ Shape is forming...",
+        "😬 Don't break it...",
+        "🎨 Almost done...",
+    ],
+    "tug_of_war": [
+        "🪢 Teams take positions...",
+        "💪 Pulling with all strength...",
+        "⚖️ Rope tightens...",
+        "🔥 Sweat and strain...",
+        "😱 Edge of the platform...",
+    ],
+    "marbles": [
+        "⚪ You face your partner...",
+        "🤝 You bet 1 marble...",
+        "🎲 Your partner guesses...",
+        "😨 One marble lost...",
+        "⚪ Final round...",
+    ],
+    "glass_bridge": [
+        "🌉 First step onto glass...",
+        "⚡ You tap the first pane...",
+        "😰 It holds! Jump to next...",
+        "💎 Tempered glass?",
+        "👣 One wrong step...",
+    ],
+    "squid_game": [
+        "🦑 Enter the squid court...",
+        "⚔️ Approach your opponent...",
+        "💢 Attack!",
+        "🛡️ Defend!",
+        "😤 Final blow...",
+    ],
+    "sniper_dodge": [
+        "🎯 Snipers aim...",
+        "🏃 Run!",
+        "💥 Bullet whizzes past...",
+        "😅 Dive behind cover...",
+        "🎯 Final stretch...",
+    ],
+    "fire_walk": [
+        "🔥 Flames roar...",
+        "👣 First step on coals...",
+        "😖 Searing heat...",
+        "🏃 Keep moving...",
+        "🏁 Almost through...",
+    ],
+    "electric_maze": [
+        "⚡ Maze of metal...",
+        "🤖 Shocks pulse randomly...",
+        "😬 Avoid the live wires...",
+        "💡 Find the path...",
+        "🏃 Exit in sight...",
+    ],
+    "russian_roulette": [
+        "🔫 Six chambers... one bullet.",
+        "🔄 Spin the cylinder...",
+        "😰 Put the gun to your head...",
+        "👆 Click.",
+        "💀 Final trigger...",
+    ],
+}
+
+def init_player(user_id):
+    """Initialize new player"""
+    player_data = load_player_from_db(user_id)
+    
+    if player_data is None:
+        player_data = {
+            'user_id': user_id,
+            'number': random.randint(1, 456),
+            'alive': True,
+            'games_survived': 0,
+            'money': 0,
+            'inventory': [],
+            'luck_stat': random.randint(3, 8),
+            'strength': random.randint(3, 8),
+            'intelligence': random.randint(3, 8),
+            'achievements': [],
+            'death_count': 0,
+            'level': 1,
+            'exp': 0,
+            'win_streak': 0,
+            'highest_streak': 0,
+            'vip_status': False,
+            'last_daily': None,
+            'created_at': datetime.utcnow()
+        }
+        
+        save_player_to_db(user_id, player_data)
+        update_global_stats({'total_players': 1})
+    
+    return player_data
+
+def save_player(user_id, player_data):
+    """Save player data"""
+    save_player_to_db(user_id, player_data)
+
+# ==================== BOT HANDLERS ====================
+@user_operation
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start command"""
+    user_id = update.effective_user.id
+    player_data = init_player(user_id)
+    
+    response = random.choice(GREETINGS)
+    
+    keyboard = [
+        [InlineKeyboardButton("🎮 GAMES", callback_data='games_hub'),
+         InlineKeyboardButton("👤 PROFILE", callback_data='profile')],
+        [InlineKeyboardButton("🏪 SHOP", callback_data='shop'),
+         InlineKeyboardButton("🤝 SOCIAL", callback_data='social')],
+        [InlineKeyboardButton("🎪 CASINO", callback_data='casino'),
+         InlineKeyboardButton("💎 VIP", callback_data='vip')],
+        [InlineKeyboardButton("🎁 REWARDS", callback_data='daily_rewards'),
+         InlineKeyboardButton("📊 STATS", callback_data='stats')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f"🎭 {response}\n\n"
+        f"╔═══════════════════════╗\n"
+        f"   Player #{player_data['number']:03d}\n"
+        f"   Level: {player_data['level']}\n"
+        f"   Status: {'✅ ALIVE' if player_data['alive'] else '💀 DEAD'}\n"
+        f"╚═══════════════════════╝\n\n"
+        f"💰 Money: ₩{player_data['money']:,}\n"
+        f"🎮 Wins: {player_data['games_survived']}\n"
+        f"🔥 Streak: {player_data['win_streak']}\n\n"
+        f"Choose your path...",
+        reply_markup=reply_markup
+    )
+
+@user_operation
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle all button callbacks"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data
+    
+    if not check_button_cooldown(user_id, data):
+        await query.answer("⏳ Wait before clicking again!", show_alert=True)
+        return
+    
+    if query.message.chat.id != user_id:
+        await query.answer("❌ Not your button!", show_alert=True)
+        return
+    
+    await query.answer()
+    player_data = init_player(user_id)
+    
+    # Main Menu
+    if data == 'main_menu':
+        keyboard = [
+            [InlineKeyboardButton("🎮 GAMES", callback_data='games_hub'),
+             InlineKeyboardButton("👤 PROFILE", callback_data='profile')],
+            [InlineKeyboardButton("🏪 SHOP", callback_data='shop'),
+             InlineKeyboardButton("🤝 SOCIAL", callback_data='social')],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            f"🎭 MENU\n\nPlayer #{player_data['number']:03d}\n💰 ₩{player_data['money']:,}",
+            reply_markup=reply_markup
+        )
+    
+    # Games Hub
+    elif data == 'games_hub':
+        keyboard = [
+            [InlineKeyboardButton("🎯 Classic", callback_data='games_classic')],
+            [InlineKeyboardButton("💀 Extreme", callback_data='games_extreme')],
+            [InlineKeyboardButton("🎰 Luck", callback_data='games_luck')],
+            [InlineKeyboardButton("🎲 Random", callback_data='random_game')],
+            [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("🎮 GAMES HUB\n\nChoose category:", reply_markup=reply_markup)
+    
+    elif data == 'games_classic':
+        keyboard = [
+            [InlineKeyboardButton("🟢 Red Light", callback_data='game_red_light')],
+            [InlineKeyboardButton("🍬 Dalgona", callback_data='game_dalgona')],
+            [InlineKeyboardButton("🪢 Tug War", callback_data='game_tug_of_war')],
+            [InlineKeyboardButton("⚪ Marbles", callback_data='game_marbles')],
+            [InlineKeyboardButton("🌉 Glass", callback_data='game_glass_bridge')],
+            [InlineKeyboardButton("🦑 Squid", callback_data='game_squid_game')],
+            [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("🎯 CLASSIC GAMES", reply_markup=reply_markup)
+    
+    elif data == 'games_extreme':
+        keyboard = [
+            [InlineKeyboardButton("🎯 Sniper (72%)", callback_data='game_sniper_dodge')],
+            [InlineKeyboardButton("🔥 Fire (61%)", callback_data='game_fire_walk')],
+            [InlineKeyboardButton("⚡ Electric (58%)", callback_data='game_electric_maze')],
+            [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("💀 EXTREME GAMES", reply_markup=reply_markup)
+    
+    elif data == 'games_luck':
+        keyboard = [
+            [InlineKeyboardButton("🔫 Roulette (17%)", callback_data='game_russian_roulette')],
+            [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("🎰 LUCK GAMES", reply_markup=reply_markup)
+    
+    elif data == 'random_game':
+        if not player_data['alive']:
+            await query.answer("💀 Dead!", show_alert=True)
+            return
+        game_key = random.choice(list(GAMES.keys()))
+        await play_game(query, game_key, user_id, player_data)
+    
+    # Profile
+    elif data == 'profile':
+        keyboard = [
+            [InlineKeyboardButton("🏆 Achievements", callback_data='profile_achievements')],
+            [InlineKeyboardButton("🎒 Inventory", callback_data='profile_inventory')],
+            [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        win_rate = (player_data['games_survived'] / (player_data['games_survived'] + player_data['death_count']) * 100) if (player_data['games_survived'] + player_data['death_count']) > 0 else 0
+        
+        await query.edit_message_text(
+            f"👤 PROFILE\n\n"
+            f"Player #{player_data['number']:03d}\n"
+            f"Level {player_data['level']}\n\n"
+            f"💰 ₩{player_data['money']:,}\n"
+            f"🎮 Wins: {player_data['games_survived']}\n"
+            f"💀 Deaths: {player_data['death_count']}\n"
+            f"📊 Rate: {win_rate:.1f}%\n"
+            f"🔥 Streak: {player_data['win_streak']}\n\n"
+            f"⚡ Luck: {player_data['luck_stat']}/10\n"
+            f"💪 Str: {player_data['strength']}/10",
+            reply_markup=reply_markup
+        )
+    
+    elif data == 'profile_achievements':
+        unlocked = len(player_data['achievements'])
+        ach_text = f"🏆 ACHIEVEMENTS\n\n{unlocked}/{len(ACHIEVEMENTS)} unlocked\n\n"
+        
+        for key, ach in ACHIEVEMENTS.items():
+            status = "✅" if key in player_data['achievements'] else "🔒"
+            ach_text += f"{status} {ach['name']}\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='profile')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(ach_text, reply_markup=reply_markup)
+    
+    elif data == 'profile_inventory':
+        if not player_data['inventory']:
+            inv_text = "🎒 INVENTORY\n\nEmpty!"
+        else:
+            inv_text = "🎒 INVENTORY\n\n"
+            counts = {}
+            for item in player_data['inventory']:
+                counts[item] = counts.get(item, 0) + 1
+            
+            for key, count in counts.items():
+                if key in MARKET_ITEMS:
+                    inv_text += f"{MARKET_ITEMS[key]['name']} x{count}\n"
+        
+        keyboard = [
+            [InlineKeyboardButton("🏪 Shop", callback_data='shop')],
+            [InlineKeyboardButton("🔙 Back", callback_data='profile')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(inv_text, reply_markup=reply_markup)
+    
+    # Shop
+    elif data == 'shop':
+        keyboard = [
+            [InlineKeyboardButton("💊 Consumables", callback_data='shop_consumables')],
+            [InlineKeyboardButton("⚔️ Equipment", callback_data='shop_equipment')],
+            [InlineKeyboardButton("💎 Premium", callback_data='shop_premium')],
+            [InlineKeyboardButton("💰 ₩" + f"{player_data['money']:,}", callback_data='shop')],
+            [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            f"🏪 SHOP\n\nBalance: ₩{player_data['money']:,}",
+            reply_markup=reply_markup
+        )
+    
+    elif data == 'shop_consumables':
+        keyboard = [
+            [InlineKeyboardButton("🍞 Food - ₩10M", callback_data='buy_food')],
+            [InlineKeyboardButton("💊 Medicine - ₩50M", callback_data='buy_medicine')],
+            [InlineKeyboardButton("🔙 Back", callback_data='shop')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"💊 CONSUMABLES\n\n₩{player_data['money']:,}", reply_markup=reply_markup)
+    
+    elif data == 'shop_equipment':
+        keyboard = [
+            [InlineKeyboardButton("🔪 Weapon - ₩100M", callback_data='buy_weapon')],
+            [InlineKeyboardButton("🛡️ Armor - ₩200M", callback_data='buy_protection')],
+            [InlineKeyboardButton("🎰 Luck - ₩300M", callback_data='buy_luck_charm')],
+            [InlineKeyboardButton("🔙 Back", callback_data='shop')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"⚔️ EQUIPMENT\n\n₩{player_data['money']:,}", reply_markup=reply_markup)
+    
+    elif data == 'shop_premium':
+        keyboard = [
+            [InlineKeyboardButton("💉 Revive - ₩500M", callback_data='buy_revive_token')],
+            [InlineKeyboardButton("🛡️ Shield - ₩450M", callback_data='buy_shield')],
+            [InlineKeyboardButton("💎 2x - ₩300M", callback_data='buy_double_reward')],
+            [InlineKeyboardButton("🔙 Back", callback_data='shop')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"💎 PREMIUM\n\n₩{player_data['money']:,}", reply_markup=reply_markup)
+    
+    # Social
+    elif data == 'social':
+        keyboard = [
+            [InlineKeyboardButton("📊 Leaderboards", callback_data='social_leaderboards')],
+            [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("🤝 SOCIAL", reply_markup=reply_markup)
+    
+    elif data == 'social_leaderboards':
+        keyboard = [
+            [InlineKeyboardButton("💰 Richest", callback_data='lb_money')],
+            [InlineKeyboardButton("🎮 Wins", callback_data='lb_wins')],
+            [InlineKeyboardButton("🔥 Streak", callback_data='lb_streak')],
+            [InlineKeyboardButton("🔙 Back", callback_data='social')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("📊 LEADERBOARDS", reply_markup=reply_markup)
+    
+    elif data == 'lb_money':
+        players = get_leaderboard('money', 10)
+        lb_text = "💰 TOP 10 RICHEST\n\n"
+        for i, p in enumerate(players, 1):
+            status = "✅" if p.get('alive', True) else "💀"
+            lb_text += f"{i}. {status} #{p.get('number', 0):03d} - ₩{p.get('money', 0):,}\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='social_leaderboards')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(lb_text, reply_markup=reply_markup)
+    
+    elif data == 'lb_wins':
+        players = get_leaderboard('games_survived', 10)
+        lb_text = "🎮 TOP 10 WINNERS\n\n"
+        for i, p in enumerate(players, 1):
+            status = "✅" if p.get('alive', True) else "💀"
+            lb_text += f"{i}. {status} #{p.get('number', 0):03d} - {p.get('games_survived', 0)}\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='social_leaderboards')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(lb_text, reply_markup=reply_markup)
+    
+    elif data == 'lb_streak':
+        players = get_leaderboard('highest_streak', 10)
+        lb_text = "🔥 TOP 10 STREAKS\n\n"
+        for i, p in enumerate(players, 1):
+            status = "✅" if p.get('alive', True) else "💀"
+            lb_text += f"{i}. {status} #{p.get('number', 0):03d} - {p.get('highest_streak', 0)}\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='social_leaderboards')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(lb_text, reply_markup=reply_markup)
+    
+    # Casino
+    elif data == 'casino':
+        keyboard = [
+            [InlineKeyboardButton("🎰 Slots (₩50M)", callback_data='casino_slots')],
+            [InlineKeyboardButton("🪙 Coin (₩50M)", callback_data='casino_coin')],
+            [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"🎪 CASINO\n\n₩{player_data['money']:,}", reply_markup=reply_markup)
+    
+    elif data == 'casino_slots':
+        if player_data['money'] < 50000000:
+            await query.answer("❌ Need ₩50M!", show_alert=True)
+            return
+        
+        player_data['money'] -= 50000000
+        symbols = ['🍒', '🍋', '⭐', '💎', '7️⃣']
+        result = [random.choice(symbols) for _ in range(3)]
+        
+        win = False
+        prize = 0
+        
+        if result[0] == result[1] == result[2]:
+            if result[0] == '7️⃣':
+                prize = 500000000
+            elif result[0] == '💎':
+                prize = 300000000
+            else:
+                prize = 100000000
+            win = True
+            player_data['money'] += prize
+        
+        save_player(user_id, player_data)
+        
+        keyboard = [
+            [InlineKeyboardButton("🔄 Again", callback_data='casino_slots')],
+            [InlineKeyboardButton("🔙 Back", callback_data='casino')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"🎰 SLOTS\n\n[ {result[0]} | {result[1]} | {result[2]} ]\n\n"
+            f"{'🎉 WIN +₩' + f'{prize:,}' if win else '❌ LOSE -₩50M'}\n\n"
+            f"💰 ₩{player_data['money']:,}",
+            reply_markup=reply_markup
+        )
+    
+    elif data == 'casino_coin':
+        keyboard = [
+            [InlineKeyboardButton("⬆️ Heads", callback_data='coin_heads')],
+            [InlineKeyboardButton("⬇️ Tails", callback_data='coin_tails')],
+            [InlineKeyboardButton("🔙 Back", callback_data='casino')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("🪙 COIN\n\nBet: ₩50M\nWin: ₩100M", reply_markup=reply_markup)
+    
+    elif data.startswith('coin_'):
+        if player_data['money'] < 50000000:
+            await query.answer("❌ Need ₩50M!", show_alert=True)
+            return
+        
+        player_data['money'] -= 50000000
+        choice = 'heads' if data == 'coin_heads' else 'tails'
+        result = random.choice(['heads', 'tails'])
+        won = choice == result
+        
+        if won:
+            player_data['money'] += 100000000
+        
+        save_player(user_id, player_data)
+        
+        keyboard = [
+            [InlineKeyboardButton("🔄 Again", callback_data='casino_coin')],
+            [InlineKeyboardButton("🔙 Back", callback_data='casino')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"🪙 COIN\n\n{choice.upper()} → {result.upper()}\n\n"
+            f"{'✅ WIN +₩100M' if won else '❌ LOSE -₩50M'}\n\n"
+            f"💰 ₩{player_data['money']:,}",
+            reply_markup=reply_markup
+        )
+    
+    # VIP
+    elif data == 'vip':
+        if not player_data['vip_status']:
+            keyboard = [
+                [InlineKeyboardButton("💎 Buy VIP (₩2B)", callback_data='buy_vip')],
+                [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "💎 VIP LOUNGE\n\n⚠️ ACCESS REQUIRED\n\n"
+                "✅ 20% better odds\n✅ 1.5x rewards\n\nCost: ₩2B",
+                reply_markup=reply_markup
+            )
+        else:
+            keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='main_menu')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("💎 VIP LOUNGE\n\n👑 Welcome!", reply_markup=reply_markup)
+    
+    elif data == 'buy_vip':
+        if player_data['money'] >= 2000000000:
+            player_data['money'] -= 2000000000
+            player_data['vip_status'] = True
+            save_player(user_id, player_data)
+            await query.answer("👑 VIP Activated!", show_alert=True)
+            keyboard = [[InlineKeyboardButton("Enter", callback_data='vip')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("👑 VIP ACTIVATED!", reply_markup=reply_markup)
+        else:
+            await query.answer("❌ Need ₩2B!", show_alert=True)
+    
+    # Daily Rewards
+    elif data == 'daily_rewards':
+        from datetime import date
+        today = date.today().isoformat()
+        
+        if player_data.get('last_daily') == today:
+            keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='main_menu')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("🎁 DAILY\n\nClaimed!\nCome tomorrow.", reply_markup=reply_markup)
+        else:
+            reward = 50000000
+            if player_data['vip_status']:
+                reward *= 2
+            
+            player_data['money'] += reward
+            player_data['last_daily'] = today
+            save_player(user_id, player_data)
+            
+            keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='main_menu')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                f"🎁 CLAIMED!\n\n+₩{reward:,}\n{'👑 VIP 2x' if player_data['vip_status'] else ''}\n\n"
+                f"💰 ₩{player_data['money']:,}",
+                reply_markup=reply_markup
+            )
+    
+    # Stats
+    elif data == 'stats':
+        stats = get_global_stats()
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='main_menu')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"📊 GLOBAL STATS\n\n"
+            f"👥 Players: {stats.get('total_players', 0):,}\n"
+            f"🎮 Games: {stats.get('games_played', 0):,}\n"
+            f"💀 Deaths: {stats.get('total_deaths', 0):,}",
+            reply_markup=reply_markup
+        )
+    
+    # Game Play
+    elif data.startswith('game_'):
+        if not player_data['alive']:
+            keyboard = [[InlineKeyboardButton("🔄 Respawn", callback_data='respawn')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("💀 DEAD\n\nRespawn?", reply_markup=reply_markup)
+            return
+        
+        game_key = data.replace('game_', '')
+        if game_key in GAMES:
+            await play_game(query, game_key, user_id, player_data)
+    
+    # Purchase
+    elif data.startswith('buy_'):
+        item_key = data.replace('buy_', '')
+        
+        if item_key in MARKET_ITEMS:
+            item = MARKET_ITEMS[item_key]
+            if player_data['money'] >= item['price']:
+                player_data['money'] -= item['price']
+                player_data['inventory'].append(item_key)
+                
+                if 'luck+' in item['effect']:
+                    player_data['luck_stat'] = min(10, player_data['luck_stat'] + 2)
+                elif 'strength+' in item['effect']:
+                    player_data['strength'] = min(10, player_data['strength'] + 2)
+                
+                save_player(user_id, player_data)
+                
+                await query.answer(f"✅ Purchased!", show_alert=True)
+                keyboard = [[InlineKeyboardButton("🔙 Shop", callback_data='shop')]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(
+                    f"✅ BOUGHT\n\n{item['name']}\n-₩{item['price']:,}\n\n₩{player_data['money']:,}",
+                    reply_markup=reply_markup
+                )
+            else:
+                await query.answer(f"❌ Need ₩{item['price']:,}!", show_alert=True)
+    
+    # Respawn
+    elif data == 'respawn':
+        player_data['alive'] = True
+        player_data['death_count'] += 1
+        player_data['number'] = random.randint(1, 456)
+        player_data['win_streak'] = 0
+        save_player(user_id, player_data)
+        
+        keyboard = [[InlineKeyboardButton("🎮 Play", callback_data='games_hub')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"🔄 RESPAWNED\n\n#{player_data['number']:03d}\nLevel {player_data['level']}\n💀 {player_data['death_count']}",
+            reply_markup=reply_markup
+        )
+
+async def play_game(query, game_key, user_id, player_data):
+    """Play game with animations"""
+    game = GAMES[game_key]
+    
+    # Initial message
+    await query.edit_message_text(
+        f"🎭 {game['name']}\n\n{game['description']}\n\n"
+        f"⚠️ {game['difficulty']}\n💀 {int(game['death_rate']*100)}%\n"
+        f"💰 ₩{game['reward']:,}\n\n⏳ Starting..."
+    )
+    
+    # Countdown
+    await asyncio.sleep(1)
+    await query.message.reply_text("3...")
+    await asyncio.sleep(1)
+    await query.message.reply_text("2...")
+    await asyncio.sleep(1)
+    await query.message.reply_text("1...")
+    await asyncio.sleep(1)
+    await query.message.reply_text("🎮 GO!")
+    await asyncio.sleep(1)
+    
+    # Game animation
+    animation_steps = GAME_ANIMATIONS.get(game_key, [
+        "🎲 The game unfolds...",
+        "⏳ Tension builds...",
+        "😰 Your heart races...",
+        "💫 Fate hangs in the balance...",
+    ])
+    
+    for step in animation_steps:
+        await query.message.reply_text(step)
+        await asyncio.sleep(1.5)  # 1.5 seconds between steps
+    
+    # Calculate survival
+    base = 1 - game['death_rate']
+    luck = player_data['luck_stat'] * 0.02
+    items = 0.05 if 'luck_charm' in player_data['inventory'] else 0
+    items += 0.10 if 'protection' in player_data['inventory'] else 0
+    vip = 0.20 if player_data['vip_status'] else 0
+    
+    chance = min(0.95, base + luck + items + vip)
+    survived = random.random() < chance
+    
+    update_global_stats({'games_played': 1})
+    
+    if survived:
+        reward = game['reward']
+        if 'double_reward' in player_data['inventory']:
+            reward *= 2
+            player_data['inventory'].remove('double_reward')
+        if player_data['vip_status']:
+            reward = int(reward * 1.5)
+        
+        player_data['games_survived'] += 1
+        player_data['money'] += reward
+        player_data['win_streak'] += 1
+        
+        if player_data['win_streak'] > player_data['highest_streak']:
+            player_data['highest_streak'] = player_data['win_streak']
+        
+        player_data['exp'] += 100
+        if player_data['exp'] >= player_data['level'] * 1000:
+            player_data['level'] += 1
+            player_data['exp'] = 0
+            await query.message.reply_text(f"🎉 LEVEL {player_data['level']}!")
+        
+        if player_data['games_survived'] == 1 and 'first_blood' not in player_data['achievements']:
+            player_data['achievements'].append('first_blood')
+            player_data['money'] += 50000000
+        
+        save_player(user_id, player_data)
+        
+        keyboard = [
+            [InlineKeyboardButton("🎮 Again", callback_data='games_hub')],
+            [InlineKeyboardButton("👤 Profile", callback_data='profile')],
+            [InlineKeyboardButton("🏪 Shop", callback_data='shop')],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.reply_text(
+            f"✅ {random.choice(SURVIVAL_MESSAGES)}\n\n"
+            f"💰 +₩{reward:,}\n🎮 {player_data['games_survived']}\n"
+            f"🔥 {player_data['win_streak']}\n💵 ₩{player_data['money']:,}",
+            reply_markup=reply_markup
+        )
+    else:
+        if 'revive_token' in player_data['inventory']:
+            player_data['inventory'].remove('revive_token')
+            save_player(user_id, player_data)
+            keyboard = [[InlineKeyboardButton("Continue", callback_data='games_hub')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.message.reply_text("💉 REVIVED!", reply_markup=reply_markup)
+            return
+        
+        player_data['alive'] = False
+        player_data['death_count'] += 1
+        player_data['win_streak'] = 0
+        
+        update_global_stats({'total_deaths': 1})
+        save_player(user_id, player_data)
+        
+        keyboard = [
+            [InlineKeyboardButton("📊 Stats", callback_data='profile')],
+            [InlineKeyboardButton("🔄 Respawn", callback_data='respawn')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.reply_text(
+            f"{random.choice(ELIMINATIONS)}\n\n#{player_data['number']:03d}\n\n"
+            f"🎮 {player_data['games_survived']}\n💰 ₩{player_data['money']:,}\n💀 {player_data['death_count']}",
+            reply_markup=reply_markup
+        )
+
+@user_operation
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle messages"""
+    user_id = update.effective_user.id
+    init_player(user_id)
+    
+    msg = update.message.text.lower()
+    
+    if 'help' in msg or 'save' in msg:
+        response = "No help. Only survival."
+    elif 'die' in msg or 'death' in msg:
+        response = "Death is inevitable."
+    else:
+        response = random.choice(THREATS + TAUNTS)
+    
+    if random.random() < 0.3:
+        keyboard = [
+            [InlineKeyboardButton("🎮 Play", callback_data='games_hub')],
+            [InlineKeyboardButton("📊 Menu", callback_data='main_menu')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(f"🎭 {response}", reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(f"🎭 {response}")
+
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🎭 SQUID GAME BOT\n\n"
+        "/start - Enter\n"
+        "/help - Commands\n"
+        "/stats - Stats\n\n"
+        "💀 Begin..."
+    )
+
+async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    stats = get_global_stats()
+    await update.message.reply_text(
+        f"📊 STATS\n\n"
+        f"👥 {stats.get('total_players', 0):,}\n"
+        f"🎮 {stats.get('games_played', 0):,}\n"
+        f"💀 {stats.get('total_deaths', 0):,}"
+    )
+
+def main():
+    """Start bot with web server"""
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_cmd))
+    application.add_handler(CommandHandler("stats", stats_cmd))
+    application.add_handler(CallbackQueryHandler(button_callback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    print("=" * 60)
+    print("🎭 SQUID GAME BOT - PRODUCTION")
+    print("=" * 60)
+    print(f"✅ MongoDB: {'Connected' if mongodb_available else 'Offline'}")
+    print(f"✅ Databases: {len(db_connections)}")
+    print(f"✅ Web Server: http://0.0.0.0:{WEB_SERVER_PORT}")
+    print("✅ Multi-user: Protected")
+    print("✅ Button spam: Blocked")
+    print("=" * 60)
+    print("🎮 Bot starting...")
+    print("=" * 60)
+    
+    # Start web server in event loop
+    async def start_all():
+        await web_server.start()
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    
+    # Run bot
+    import asyncio
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(start_all())
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
+
+if __name__ == '__main__':
+    main()
