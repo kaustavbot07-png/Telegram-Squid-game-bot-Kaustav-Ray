@@ -6,7 +6,7 @@ import random
 import asyncio
 from datetime import datetime, timedelta
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+from pymongo.errors import ConnectionFailure, ConfigurationError
 import threading
 from functools import wraps
 import time
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ==================== CONFIGURATION ====================
 # Bot Token
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+BOT_TOKEN = "5966719769:AAEilFOlMwwEUOUFXBmmgQL11NpKMliuXbs"
 
 # Web Server Configuration
 WEB_SERVER_PORT = int(os.environ.get("PORT", 8080))
@@ -30,10 +30,7 @@ WEB_SERVER_HOST = "0.0.0.0"
 
 # MongoDB URIs (Add your MongoDB connection strings)
 MONGODB_URIS = [
-    os.environ.get("MONGODB_URI_1", "mongodb://localhost:27017/"),
-    os.environ.get("MONGODB_URI_2", "mongodb+srv://user1:pass1@cluster1.mongodb.net/"),
-    os.environ.get("MONGODB_URI_3", "mongodb+srv://user2:pass2@cluster2.mongodb.net/"),
-    os.environ.get("MONGODB_URI_4", "mongodb+srv://user3:pass3@cluster3.mongodb.net/"),
+    "mongodb+srv://ghost1770093833371_db_user:vkvFRL7gv0TTsOIv@cluster0.junc572.mongodb.net/?appName=Cluster0",
 ]
 
 # Database Configuration
@@ -229,8 +226,8 @@ def init_mongodb():
                 active_db = db
                 logger.info(f"✅ Active database set")
                 
-        except ConnectionFailure as e:
-            logger.warning(f"❌ MongoDB failed: {uri[:30]}...")
+        except (ConnectionFailure, ConfigurationError, Exception) as e:
+            logger.warning(f"❌ MongoDB failed ({type(e).__name__}): {uri[:30]}... Error: {e}")
             continue
     
     if not db_connections:
