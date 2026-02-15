@@ -830,6 +830,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'games_hub':
         keyboard = [
             [InlineKeyboardButton("🎯 Classic", callback_data='games_classic')],
+            [InlineKeyboardButton("🕹️ Arcade", callback_data='games_arcade')],
             [InlineKeyboardButton("💀 Extreme", callback_data='games_extreme')],
             [InlineKeyboardButton("🎰 Luck", callback_data='games_luck')],
             [InlineKeyboardButton("🎲 Random", callback_data='random_game')],
@@ -838,6 +839,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("🎮 GAMES HUB\n\nChoose category:", reply_markup=reply_markup)
     
+    elif data == 'games_arcade':
+        keyboard = [
+            [InlineKeyboardButton("❌⭕ Tic Tac Toe", callback_data='game_ttt')],
+            [InlineKeyboardButton("👊✋✌️ RPS", callback_data='game_rps')],
+            [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("🕹️ ARCADE GAMES", reply_markup=reply_markup)
+
+    elif data == 'game_ttt':
+        await tictactoe_cmd(update, context)
+
+    elif data == 'game_rps':
+        await rps_cmd(update, context)
+
     elif data == 'games_classic':
         keyboard = [
             [InlineKeyboardButton("🟢 Red Light", callback_data='game_red_light')],
@@ -1036,12 +1052,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'casino':
         keyboard = [
             [InlineKeyboardButton("🎰 Slots (₩50M)", callback_data='casino_slots')],
+            [InlineKeyboardButton("🃏 Blackjack (₩50M)", callback_data='casino_blackjack')],
+            [InlineKeyboardButton("🔴⚫ Roulette (₩50M)", callback_data='casino_roulette')],
             [InlineKeyboardButton("🪙 Coin (₩50M)", callback_data='casino_coin')],
             [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(f"🎪 CASINO\n\n₩{player_data['money']:,}", reply_markup=reply_markup)
     
+    elif data == 'casino_blackjack':
+        await blackjack_cmd(update, context)
+
+    elif data == 'casino_roulette':
+        await roulette_cmd(update, context)
+
     elif data == 'casino_slots':
         if player_data['money'] < 50000000:
             await query.answer("❌ Need ₩50M!", show_alert=True)
@@ -1708,6 +1732,428 @@ async def ludo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(game.render_status(), reply_markup=InlineKeyboardMarkup(keyboard))
 
+
+# ==================== TIC TAC TOE SYSTEM ====================
+tictactoe_games = {}
+
+class TicTacToeGame:
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.board = [' '] * 9
+        self.turn = 'X'
+        self.winner = None
+        self.game_over = False
+        self.log = "🎮 Tic Tac Toe vs Bot"
+
+    def make_move(self, position):
+        if self.board[position] == ' ':
+            self.board[position] = 'X'
+            if self.check_win('X'):
+                self.winner = 'X'
+                self.game_over = True
+                self.log = "🎉 YOU WIN!"
+            elif ' ' not in self.board:
+                self.game_over = True
+                self.log = "🤝 DRAW!"
+            else:
+                self.turn = 'O'
+                self.bot_move()
+            return True
+        return False
+
+    def bot_move(self):
+        if self.game_over: return
+        available = [i for i, x in enumerate(self.board) if x == ' ']
+        if not available: return
+
+        move = -1
+        # Try to win
+        for m in available:
+            self.board[m] = 'O'
+            if self.check_win('O'):
+                move = m
+                break
+            self.board[m] = ' '
+
+        if move == -1: # Block
+            for m in available:
+                self.board[m] = 'X'
+                if self.check_win('X'):
+                    move = m
+                    self.board[m] = ' '
+                    break
+                self.board[m] = ' '
+
+        if move == -1:
+            move = random.choice(available)
+
+        self.board[move] = 'O'
+        if self.check_win('O'):
+            self.winner = 'O'
+            self.game_over = True
+            self.log = "💀 BOT WINS!"
+        elif ' ' not in self.board:
+            self.game_over = True
+            self.log = "🤝 DRAW!"
+        else:
+            self.turn = 'X'
+
+    def check_win(self, mark):
+        wins = [(0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6)]
+        return any(all(self.board[i] == mark for i in line) for line in wins)
+
+    def render_board(self):
+        key = {'X': '❌', 'O': '⭕', ' ': '⬜'}
+        display = f"{self.log}\n\n"
+        for i in range(0, 9, 3):
+            row = [key[self.board[i+j]] for j in range(3)]
+            display += "".join(row) + "\n"
+        return display
+
+async def send_tictactoe_board(update, user_id):
+    game = tictactoe_games[user_id]
+    keyboard = []
+    if not game.game_over:
+        for i in range(0, 9, 3):
+            row = []
+            for j in range(3):
+                idx = i+j
+                text = " " if game.board[idx] == ' ' else game.board[idx]
+                row.append(InlineKeyboardButton(text, callback_data=f'ttt_move_{idx}'))
+            keyboard.append(row)
+    else:
+        keyboard.append([InlineKeyboardButton("🔄 Play Again", callback_data='ttt_new')])
+
+    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data='games_arcade')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(game.render_board(), reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(game.render_board(), reply_markup=reply_markup)
+
+@user_operation
+async def tictactoe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data
+
+    if data == 'ttt_new':
+        tictactoe_games[user_id] = TicTacToeGame(user_id)
+        await send_tictactoe_board(update, user_id)
+        return
+
+    if user_id not in tictactoe_games:
+        tictactoe_games[user_id] = TicTacToeGame(user_id)
+
+    game = tictactoe_games[user_id]
+
+    if data.startswith('ttt_move_'):
+        idx = int(data.split('_')[2])
+        if not game.game_over and game.board[idx] == ' ':
+            game.make_move(idx)
+            if game.winner == 'X':
+                p = load_player_from_db(user_id)
+                if p:
+                    p['money'] += 50000000
+                    save_player(user_id, p)
+                    game.log += "\n💰 +₩50,000,000"
+            await send_tictactoe_board(update, user_id)
+            if game.game_over:
+                del tictactoe_games[user_id]
+        else:
+            await query.answer("❌ Invalid move!", show_alert=True)
+    else:
+        await send_tictactoe_board(update, user_id)
+
+async def tictactoe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    tictactoe_games[user_id] = TicTacToeGame(user_id)
+    await send_tictactoe_board(update, user_id)
+
+
+# ==================== ROCK PAPER SCISSORS SYSTEM ====================
+async def rps_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("👊 ROCK", callback_data='rps_rock'),
+         InlineKeyboardButton("✋ PAPER", callback_data='rps_paper'),
+         InlineKeyboardButton("✌️ SCISSORS", callback_data='rps_scissors')],
+        [InlineKeyboardButton("🔙 Back", callback_data='games_arcade')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    msg = "🎮 ROCK PAPER SCISSORS\n\nChoose your weapon!"
+    if update.callback_query:
+        await update.callback_query.edit_message_text(msg, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(msg, reply_markup=reply_markup)
+
+@user_operation
+async def rps_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    choice = query.data.split('_')[1]
+
+    # Animation
+    await query.edit_message_text("👊 ROCK...", reply_markup=None)
+    await asyncio.sleep(0.8)
+    await query.edit_message_text("✋ PAPER...", reply_markup=None)
+    await asyncio.sleep(0.8)
+    await query.edit_message_text("✌️ SCISSORS...", reply_markup=None)
+    await asyncio.sleep(0.8)
+    await query.edit_message_text("🔫 SHOOT!", reply_markup=None)
+    await asyncio.sleep(0.5)
+
+    bot_choice = random.choice(['rock', 'paper', 'scissors'])
+    emoji = {'rock': '👊', 'paper': '✋', 'scissors': '✌️'}
+
+    result = "🤝 DRAW!"
+    win = False
+
+    if choice == bot_choice:
+        result = "🤝 DRAW!"
+    elif (choice == 'rock' and bot_choice == 'scissors') or \
+         (choice == 'paper' and bot_choice == 'rock') or \
+         (choice == 'scissors' and bot_choice == 'paper'):
+        result = "🎉 YOU WIN!"
+        win = True
+    else:
+        result = "💀 YOU LOSE!"
+
+    msg = f"🎮 RESULTS\n\nYou: {emoji[choice]}\nBot: {emoji[bot_choice]}\n\n{result}"
+
+    if win:
+        p = load_player_from_db(user_id)
+        if p:
+            p['money'] += 30000000
+            save_player(user_id, p)
+            msg += "\n💰 +₩30,000,000"
+
+    keyboard = [
+        [InlineKeyboardButton("🔄 Again", callback_data='game_rps')],
+        [InlineKeyboardButton("🔙 Back", callback_data='games_arcade')]
+    ]
+    await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ==================== BLACKJACK SYSTEM ====================
+blackjack_games = {}
+
+class BlackjackGame:
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.deck = []
+        self.player_hand = []
+        self.dealer_hand = []
+        self.game_over = False
+        self.status = "Playing"
+        self.create_deck()
+        self.deal_initial()
+
+    def create_deck(self):
+        suits = ['♠️', '♥️', '♦️', '♣️']
+        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+        self.deck = [{'rank': r, 'suit': s, 'value': self.get_value(r)} for s in suits for r in ranks]
+        random.shuffle(self.deck)
+
+    def get_value(self, rank):
+        if rank in ['J', 'Q', 'K']: return 10
+        if rank == 'A': return 11
+        return int(rank)
+
+    def deal_initial(self):
+        self.player_hand = [self.deck.pop(), self.deck.pop()]
+        self.dealer_hand = [self.deck.pop(), self.deck.pop()]
+
+    def calculate_score(self, hand):
+        score = sum(card['value'] for card in hand)
+        aces = sum(1 for card in hand if card['rank'] == 'A')
+        while score > 21 and aces:
+            score -= 10
+            aces -= 1
+        return score
+
+    def hit(self):
+        self.player_hand.append(self.deck.pop())
+        if self.calculate_score(self.player_hand) > 21:
+            self.game_over = True
+            self.status = "BUST"
+
+    def stand(self):
+        self.game_over = True
+        while self.calculate_score(self.dealer_hand) < 17:
+            self.dealer_hand.append(self.deck.pop())
+
+        p_score = self.calculate_score(self.player_hand)
+        d_score = self.calculate_score(self.dealer_hand)
+
+        if d_score > 21:
+            self.status = "WIN"
+        elif p_score > d_score:
+            self.status = "WIN"
+        elif p_score < d_score:
+            self.status = "LOSE"
+        else:
+            self.status = "PUSH"
+
+    def render(self, reveal=False):
+        p_score = self.calculate_score(self.player_hand)
+
+        cards_str = " ".join([f"{c['rank']}{c['suit']}" for c in self.player_hand])
+        txt = f"🃏 BLACKJACK\n\n👤 YOU ({p_score})\n{cards_str}\n\n"
+
+        if reveal or self.game_over:
+            d_score = self.calculate_score(self.dealer_hand)
+            d_cards = " ".join([f"{c['rank']}{c['suit']}" for c in self.dealer_hand])
+            txt += f"🕴️ DEALER ({d_score})\n{d_cards}\n\n"
+        else:
+            c = self.dealer_hand[0]
+            txt += f"🕴️ DEALER (?)\n{c['rank']}{c['suit']} 🂠\n\n"
+
+        if self.game_over:
+            if self.status == "WIN": txt += "🎉 YOU WIN! +₩100M"
+            elif self.status == "LOSE": txt += "💀 YOU LOSE!"
+            elif self.status == "BUST": txt += "💥 BUST!"
+            elif self.status == "PUSH": txt += "🤝 PUSH (Money returned)"
+
+        return txt
+
+async def blackjack_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    p = load_player_from_db(user_id)
+    if not p or p['money'] < 50000000:
+        if update.callback_query:
+            await update.callback_query.answer("❌ Need ₩50M!", show_alert=True)
+        else:
+            await update.message.reply_text("❌ Need ₩50M to play!")
+        return
+
+    p['money'] -= 50000000
+    save_player(user_id, p)
+
+    game = BlackjackGame(user_id)
+    blackjack_games[user_id] = game
+
+    keyboard = [
+        [InlineKeyboardButton("👊 HIT", callback_data='bj_hit'),
+         InlineKeyboardButton("✋ STAND", callback_data='bj_stand')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(game.render(), reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(game.render(), reply_markup=reply_markup)
+
+@user_operation
+async def blackjack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data
+
+    if user_id not in blackjack_games:
+        await query.answer("❌ Game expired.", show_alert=True)
+        return
+
+    game = blackjack_games[user_id]
+
+    if data == 'bj_hit':
+        game.hit()
+        if game.game_over:
+            del blackjack_games[user_id]
+            keyboard = [[InlineKeyboardButton("🔄 Again", callback_data='casino_blackjack'),
+                         InlineKeyboardButton("🔙 Back", callback_data='casino')]]
+            await query.edit_message_text(game.render(reveal=True), reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            keyboard = [
+                [InlineKeyboardButton("👊 HIT", callback_data='bj_hit'),
+                 InlineKeyboardButton("✋ STAND", callback_data='bj_stand')]
+            ]
+            await query.edit_message_text(game.render(), reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data == 'bj_stand':
+        game.stand()
+        p = load_player_from_db(user_id)
+        if game.status == "WIN":
+            p['money'] += 100000000
+        elif game.status == "PUSH":
+            p['money'] += 50000000
+        save_player(user_id, p)
+
+        del blackjack_games[user_id]
+        keyboard = [[InlineKeyboardButton("🔄 Again", callback_data='casino_blackjack'),
+                     InlineKeyboardButton("🔙 Back", callback_data='casino')]]
+        await query.edit_message_text(game.render(reveal=True), reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ==================== ROULETTE SYSTEM ====================
+async def roulette_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("🔴 RED (2x)", callback_data='roulette_red'),
+         InlineKeyboardButton("⚫ BLACK (2x)", callback_data='roulette_black')],
+        [InlineKeyboardButton("1-12 (3x)", callback_data='roulette_1-12'),
+         InlineKeyboardButton("13-24 (3x)", callback_data='roulette_13-24'),
+         InlineKeyboardButton("25-36 (3x)", callback_data='roulette_25-36')],
+        [InlineKeyboardButton("🟢 GREEN (35x)", callback_data='roulette_green')],
+        [InlineKeyboardButton("🔙 Back", callback_data='casino')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    msg = "🎡 ROULETTE\n\nBet: ₩50M\nChoose your bet:"
+    if update.callback_query:
+        await update.callback_query.edit_message_text(msg, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(msg, reply_markup=reply_markup)
+
+@user_operation
+async def roulette_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    bet_type = query.data.split('_')[1]
+
+    p = load_player_from_db(user_id)
+    if not p or p['money'] < 50000000:
+        await query.answer("❌ Need ₩50M!", show_alert=True)
+        return
+
+    p['money'] -= 50000000
+    save_player(user_id, p)
+
+    # Animation
+    await query.edit_message_text("🎡 Spinning... 🔴", reply_markup=None)
+    await asyncio.sleep(0.5)
+    await query.edit_message_text("🎡 Spinning... ⚫", reply_markup=None)
+    await asyncio.sleep(0.5)
+    await query.edit_message_text("🎡 Spinning... 🟢", reply_markup=None)
+    await asyncio.sleep(0.5)
+    await query.edit_message_text("🎡 Ball bouncing...", reply_markup=None)
+    await asyncio.sleep(0.5)
+
+    result_num = random.randint(0, 36)
+    color = "green" if result_num == 0 else ("red" if result_num in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36] else "black")
+    emoji = {'red': '🔴', 'black': '⚫', 'green': '🟢'}
+
+    win = False
+    multiplier = 0
+
+    if bet_type == 'red' and color == 'red': win = True; multiplier = 2
+    elif bet_type == 'black' and color == 'black': win = True; multiplier = 2
+    elif bet_type == 'green' and color == 'green': win = True; multiplier = 35
+    elif bet_type == '1-12' and 1 <= result_num <= 12: win = True; multiplier = 3
+    elif bet_type == '13-24' and 13 <= result_num <= 24: win = True; multiplier = 3
+    elif bet_type == '25-36' and 25 <= result_num <= 36: win = True; multiplier = 3
+
+    msg = f"🎡 RESULT: {emoji[color]} {result_num}\n\n"
+    if win:
+        p['money'] += 50000000 * multiplier
+        save_player(user_id, p)
+        msg += f"🎉 YOU WIN! +₩{50000000 * multiplier:,}"
+    else:
+        msg += "💀 YOU LOSE!"
+
+    msg += f"\n💰 ₩{p['money']:,}"
+
+    keyboard = [[InlineKeyboardButton("🔄 Again", callback_data='casino_roulette'),
+                 InlineKeyboardButton("🔙 Back", callback_data='casino')]]
+    await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
 def main():
     """Start bot with web server"""
     application = Application.builder().token(BOT_TOKEN).build()
@@ -1719,6 +2165,13 @@ def main():
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("send_to_user", send_to_user))
     application.add_handler(CommandHandler("ludo", ludo_cmd))
+
+    # New Game Handlers
+    application.add_handler(CallbackQueryHandler(tictactoe_callback, pattern='^ttt_'))
+    application.add_handler(CallbackQueryHandler(rps_callback, pattern='^rps_'))
+    application.add_handler(CallbackQueryHandler(blackjack_callback, pattern='^bj_'))
+    application.add_handler(CallbackQueryHandler(roulette_callback, pattern='^roulette_'))
+
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
