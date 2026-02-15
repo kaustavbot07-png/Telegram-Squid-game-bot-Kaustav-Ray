@@ -755,6 +755,39 @@ def save_player(user_id, player_data):
     """Save player data"""
     save_player_to_db(user_id, player_data)
 
+async def add_experience(user_id, amount, update):
+    """Add experience to user and check level up"""
+    player_data = load_player_from_db(user_id)
+    if not player_data:
+        return
+
+    if 'level' not in player_data:
+        player_data['level'] = 1
+    if 'exp' not in player_data:
+        player_data['exp'] = 0
+
+    player_data['exp'] += amount
+
+    # Level calculation: Level * 1000 required for next level
+    required_exp = player_data['level'] * 1000
+
+    if player_data['exp'] >= required_exp:
+        player_data['level'] += 1
+        player_data['exp'] = 0 # Reset exp as per existing logic
+        save_player(user_id, player_data)
+
+        msg = f"🎉 LEVEL UP! You are now Level {player_data['level']}!"
+        try:
+            if update.callback_query:
+                # Use message from callback query
+                await update.callback_query.message.reply_text(msg)
+            elif update.message:
+                await update.message.reply_text(msg)
+        except Exception as e:
+            logger.error(f"Error sending level up message: {e}")
+    else:
+        save_player(user_id, player_data)
+
 # ==================== BOT HANDLERS ====================
 @user_operation
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -806,6 +839,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.answer()
+
+    # Add experience for interaction
+    await add_experience(user_id, 2, update)
+
     player_data = init_player(user_id)
     
     # Main Menu
@@ -1401,6 +1438,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     init_player(user_id)
     
+    # Add experience for chatting
+    await add_experience(user_id, 5, update)
+
     msg = update.message.text.lower()
     
     if 'help' in msg or 'save' in msg:
