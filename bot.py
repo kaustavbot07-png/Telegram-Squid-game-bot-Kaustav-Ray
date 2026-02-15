@@ -40,7 +40,7 @@ MONGODB_URIS = [
 ]
 
 # Database Configuration
-DB_NAME = "squid_game_bot"
+DB_NAME = "bot_db"
 COLLECTION_PLAYERS = "players"
 COLLECTION_GUILDS = "guilds"
 COLLECTION_TOURNAMENTS = "tournaments"
@@ -69,7 +69,7 @@ class WebServer:
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Squid Game Bot</title>
+            <title>Bot Status</title>
             <style>
                 body {
                     font-family: Arial, sans-serif;
@@ -93,14 +93,13 @@ class WebServer:
         </head>
         <body>
             <div class="container">
-                <h1>🎭 SQUID GAME BOT</h1>
+                <h1>🤖 BOT STATUS</h1>
                 <p class="status">✅ BOT IS RUNNING</p>
                 <div class="info">
                     <p>📊 <a href="/stats">View Statistics</a></p>
                     <p>❤️ <a href="/health">Health Check</a></p>
                     <p>📈 <a href="/status">System Status</a></p>
                 </div>
-                <p>💀 Let the games begin...</p>
             </div>
         </body>
         </html>
@@ -168,19 +167,7 @@ class WebServer:
             </style>
         </head>
         <body>
-            <h1>🎭 SQUID GAME BOT STATISTICS</h1>
-            <div class="stat-box">
-                <p>👥 Total Players</p>
-                <p class="value">{stats.get('total_players', 0):,}</p>
-            </div>
-            <div class="stat-box">
-                <p>🎮 Games Played</p>
-                <p class="value">{stats.get('games_played', 0):,}</p>
-            </div>
-            <div class="stat-box">
-                <p>💀 Total Deaths</p>
-                <p class="value">{stats.get('total_deaths', 0):,}</p>
-            </div>
+            <h1>🤖 BOT STATISTICS</h1>
             <div class="stat-box">
                 <p>⏰ Last Updated</p>
                 <p>{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
@@ -243,8 +230,6 @@ def init_mongodb():
     try:
         active_db[COLLECTION_PLAYERS].create_index("user_id", unique=True)
         active_db[COLLECTION_PLAYERS].create_index("money")
-        active_db[COLLECTION_PLAYERS].create_index("games_survived")
-        active_db[COLLECTION_PLAYERS].create_index("win_streak")
         logger.info("✅ Database indexes created")
     except Exception as e:
         logger.error(f"❌ Error creating indexes: {e}")
@@ -440,21 +425,21 @@ def update_global_stats(stats_update):
 def get_global_stats():
     """Get global statistics"""
     if not mongodb_available:
-        return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
+        return {}
     
     try:
         db = get_active_db()
         if db is None:
-            return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
+            return {}
         
         stats = db[COLLECTION_GLOBAL_STATS].find_one({'_id': 'global'})
         if stats:
             return stats
-        return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
+        return {}
         
     except Exception as e:
         logger.error(f"Error getting global stats: {e}")
-        return {'total_players': 0, 'games_played': 0, 'total_deaths': 0}
+        return {}
 
 def get_all_user_ids():
     """Get all user IDs for broadcast"""
@@ -487,18 +472,6 @@ ACHIEVEMENTS = {
     "rich": {"name": "💰 Millionaire", "desc": "Earn ₩1B", "reward": 100000000},
 }
 
-async def send_level_up(user_id, first_name, new_level, context):
-    """Send level up notification"""
-    msg = f"🎉 LEVEL UP!\n\n[{first_name}](tg://user?id={user_id}) is now Level {new_level}!"
-    try:
-        await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=msg, parse_mode='Markdown')
-    except Exception:
-        pass
-    try:
-        await context.bot.send_message(chat_id=user_id, text=msg, parse_mode='Markdown')
-    except Exception:
-        pass
-
 def init_player(user_id):
     """Initialize new player"""
     player_data = load_player_from_db(user_id)
@@ -506,28 +479,20 @@ def init_player(user_id):
     if player_data is None:
         player_data = {
             'user_id': user_id,
-            'number': random.randint(1, 456),
-            'alive': True,
-            'games_survived': 0,
             'money': 0,
             'inventory': [],
             'luck_stat': random.randint(3, 8),
             'strength': random.randint(3, 8),
             'intelligence': random.randint(3, 8),
             'achievements': [],
-            'death_count': 0,
-            'level': 1,
-            'exp': 0,
             'reputation': 0,
-            'win_streak': 0,
-            'highest_streak': 0,
             'vip_status': False,
             'last_daily': None,
             'created_at': datetime.utcnow()
         }
         
         save_player_to_db(user_id, player_data)
-        update_global_stats({'total_players': 1})
+        # update_global_stats({'total_players': 1}) # Removed global stats tracking for players
     else:
         # Ensure reputation exists for existing players
         if 'reputation' not in player_data:
@@ -540,38 +505,7 @@ def save_player(user_id, player_data):
     """Save player data"""
     save_player_to_db(user_id, player_data)
 
-async def add_experience(user_id, amount, context, first_name):
-    """Add experience to user and check level up"""
-    player_data = load_player_from_db(user_id)
-    if not player_data:
-        return
-
-    if 'level' not in player_data:
-        player_data['level'] = 1
-    if 'exp' not in player_data:
-        player_data['exp'] = 0
-    if 'reputation' not in player_data:
-        player_data['reputation'] = 0
-
-    if player_data['level'] < 1:
-        player_data['level'] = 1
-
-    player_data['exp'] += amount
-    old_level = player_data['level']
-
-    # Level calculation: Level n -> n+1 requires 100 * (2^(n-1))
-    while player_data['level'] < 200:
-        required_exp = 100 * (2 ** (player_data['level'] - 1))
-        if player_data['exp'] >= required_exp:
-            player_data['level'] += 1
-            player_data['exp'] -= required_exp
-        else:
-            break
-
-    if player_data['level'] > old_level:
-        await send_level_up(user_id, first_name, player_data['level'], context)
-
-    save_player(user_id, player_data)
+# Removed XP and Level Logic
 
 # ==================== BOT HANDLERS ====================
 @user_operation
@@ -591,10 +525,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"🎭 *Squid Game Bot*\n\n"
-        f"Welcome, Player #{player_data['number']:03d}.\n"
-        f"Level: {player_data['level']}\n"
-        f"Status: {'✅ ALIVE' if player_data['alive'] else '💀 DEAD'}\n\n"
+        f"🎭 *Bot*\n\n"
+        f"Welcome.\n"
+        f"Status: ✅ ONLINE\n\n"
         f"💰 Money: ₩{player_data['money']:,}\n"
         f"⚡ Reputation: {player_data['reputation']}\n\n"
         f"Choose your action...",
@@ -619,8 +552,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
 
-    # Add experience for interaction
-    await add_experience(user_id, 2, context, query.from_user.first_name)
+    # Removed Experience Addition
 
     player_data = init_player(user_id)
     
@@ -636,7 +568,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            f"🎭 MENU\n\nPlayer #{player_data['number']:03d}\n💰 ₩{player_data['money']:,}",
+            f"🎭 MENU\n\n💰 ₩{player_data['money']:,}",
             reply_markup=reply_markup
         )
     
@@ -649,18 +581,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        win_rate = (player_data['games_survived'] / (player_data['games_survived'] + player_data['death_count']) * 100) if (player_data['games_survived'] + player_data['death_count']) > 0 else 0
-        
         await query.edit_message_text(
             f"👤 PROFILE\n\n"
-            f"Player #{player_data['number']:03d}\n"
-            f"Level {player_data['level']}\n"
             f"Reputation: {player_data['reputation']}\n\n"
             f"💰 ₩{player_data['money']:,}\n"
-            f"🎮 Wins: {player_data['games_survived']}\n"
-            f"💀 Deaths: {player_data['death_count']}\n"
-            f"📊 Rate: {win_rate:.1f}%\n"
-            f"🔥 Streak: {player_data['win_streak']}\n\n"
             f"⚡ Luck: {player_data['luck_stat']}/10\n"
             f"💪 Str: {player_data['strength']}/10",
             reply_markup=reply_markup
@@ -754,8 +678,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'social_leaderboards':
         keyboard = [
             [InlineKeyboardButton("💰 Richest", callback_data='lb_money')],
-            [InlineKeyboardButton("🎮 Wins", callback_data='lb_wins')],
-            [InlineKeyboardButton("🔥 Streak", callback_data='lb_streak')],
             [InlineKeyboardButton("🔙 Back", callback_data='social')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -765,30 +687,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         players = get_leaderboard('money', 10)
         lb_text = "💰 TOP 10 RICHEST\n\n"
         for i, p in enumerate(players, 1):
-            status = "✅" if p.get('alive', True) else "💀"
-            lb_text += f"{i}. {status} #{p.get('number', 0):03d} - ₩{p.get('money', 0):,}\n"
-        
-        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='social_leaderboards')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(lb_text, reply_markup=reply_markup)
-    
-    elif data == 'lb_wins':
-        players = get_leaderboard('games_survived', 10)
-        lb_text = "🎮 TOP 10 WINNERS\n\n"
-        for i, p in enumerate(players, 1):
-            status = "✅" if p.get('alive', True) else "💀"
-            lb_text += f"{i}. {status} #{p.get('number', 0):03d} - {p.get('games_survived', 0)}\n"
-        
-        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='social_leaderboards')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(lb_text, reply_markup=reply_markup)
-    
-    elif data == 'lb_streak':
-        players = get_leaderboard('highest_streak', 10)
-        lb_text = "🔥 TOP 10 STREAKS\n\n"
-        for i, p in enumerate(players, 1):
-            status = "✅" if p.get('alive', True) else "💀"
-            lb_text += f"{i}. {status} #{p.get('number', 0):03d} - {p.get('highest_streak', 0)}\n"
+            lb_text += f"{i}. ₩{p.get('money', 0):,}\n"
         
         keyboard = [[InlineKeyboardButton("🔙 Back", callback_data='social_leaderboards')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -858,9 +757,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await query.edit_message_text(
             f"📊 GLOBAL STATS\n\n"
-            f"👥 Players: {stats.get('total_players', 0):,}\n"
-            f"🎮 Games: {stats.get('games_played', 0):,}\n"
-            f"💀 Deaths: {stats.get('total_deaths', 0):,}",
+            f"✅ Bot Online",
             reply_markup=reply_markup
         )
     
@@ -891,22 +788,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.answer(f"❌ Need ₩{item['price']:,}!", show_alert=True)
-    
-    # Respawn
-    elif data == 'respawn':
-        player_data['alive'] = True
-        player_data['death_count'] += 1
-        player_data['number'] = random.randint(1, 456)
-        player_data['win_streak'] = 0
-        save_player(user_id, player_data)
-        
-        keyboard = [[InlineKeyboardButton("👤 Profile", callback_data='profile')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"🔄 RESPAWNED\n\n#{player_data['number']:03d}\nLevel {player_data['level']}\n💀 {player_data['death_count']}",
-            reply_markup=reply_markup
-        )
 
 @user_operation
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -914,13 +795,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     init_player(user_id)
     
-    # Add experience for chatting
-    xp_amount = 2 if update.effective_chat.id == TARGET_GROUP_ID else 1
-    await add_experience(user_id, xp_amount, context, update.effective_user.first_name)
+    # Removed Experience Addition
 
     # Simple response logic
     if random.random() < 0.1:
-        await update.message.reply_text("Keep playing...")
+        await update.message.reply_text("Hello there!")
 
 # ==================== NEW ADMIN COMMANDS ====================
 async def log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -938,9 +817,9 @@ async def log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def about_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """About bot"""
     await update.message.reply_text(
-        "🎭 *Squid Game Bot*\n"
-        "Version: 2.0 (No Games Edition)\n"
-        "Created for fun and stats.",
+        "🎭 *Bot*\n"
+        "Version: 2.0\n"
+        "Created for fun.",
         parse_mode='Markdown'
     )
 
@@ -951,32 +830,17 @@ async def statistics_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         f"👤 *YOUR STATISTICS*\n\n"
-        f"🆔 ID: `{user_id}`\n"
-        f"🔢 Player #: {player_data['number']:03d}\n"
-        f"⭐ Level: {player_data['level']}\n"
-        f"✨ XP: {player_data['exp']}\n"
         f"⚡ Reputation: {player_data['reputation']}\n"
-        f"💰 Money: ₩{player_data['money']:,}\n"
-        f"🎮 Games Survived: {player_data['games_survived']}\n"
-        f"💀 Deaths: {player_data['death_count']}\n"
-        f"🔥 Streak: {player_data['win_streak']}",
+        f"💰 Money: ₩{player_data['money']:,}",
         parse_mode='Markdown'
     )
-
-async def topxp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show top users by XP"""
-    players = get_leaderboard('exp', 10)
-    msg = "🏆 *TOP 10 XP LEADERS*\n\n"
-    for i, p in enumerate(players, 1):
-        msg += f"{i}. Level {p.get('level', 1)} | XP: {p.get('exp', 0)} - Player #{p.get('number', 0):03d}\n"
-    await update.message.reply_text(msg, parse_mode='Markdown')
 
 async def topcoins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show top users by Coins"""
     players = get_leaderboard('money', 10)
     msg = "💰 *TOP 10 RICHEST*\n\n"
     for i, p in enumerate(players, 1):
-        msg += f"{i}. ₩{p.get('money', 0):,} - Player #{p.get('number', 0):03d}\n"
+        msg += f"{i}. ₩{p.get('money', 0):,}\n"
     await update.message.reply_text(msg, parse_mode='Markdown')
 
 async def toprep_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -984,14 +848,8 @@ async def toprep_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     players = get_leaderboard('reputation', 10)
     msg = "⚡ *TOP 10 REPUTATION*\n\n"
     for i, p in enumerate(players, 1):
-        msg += f"{i}. Rep: {p.get('reputation', 0)} - Player #{p.get('number', 0):03d}\n"
+        msg += f"{i}. Rep: {p.get('reputation', 0)}\n"
     await update.message.reply_text(msg, parse_mode='Markdown')
-
-async def getxp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get own XP"""
-    user_id = update.effective_user.id
-    player_data = init_player(user_id)
-    await update.message.reply_text(f"⭐ *Level:* {player_data['level']}\n✨ *XP:* {player_data['exp']}", parse_mode='Markdown')
 
 async def getrep_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get own Reputation"""
@@ -1012,12 +870,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start - Start bot\n"
         "/about - About bot\n"
         "/statistics - Your full stats\n"
-        "/topxp - Top XP Leaderboard\n"
-        "/toplvl - Alias for topxp\n"
         "/topcoins - Top Richest Players\n"
         "/toprep - Top Reputation\n"
-        "/getxp - View your XP/Level\n"
-        "/getlvl - Alias for getxp\n"
         "/getcoins - View your Money\n"
         "/getrep - View your Reputation\n\n"
         "*Admin Commands:*\n"
@@ -1032,9 +886,7 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats = get_global_stats()
     await update.message.reply_text(
         f"📊 *GLOBAL STATS*\n\n"
-        f"👥 Total Players: {stats.get('total_players', 0):,}\n"
-        f"🎮 Games Played (Legacy): {stats.get('games_played', 0):,}\n"
-        f"💀 Total Deaths: {stats.get('total_deaths', 0):,}",
+        f"✅ Bot Online",
         parse_mode='Markdown'
     )
 
@@ -1110,12 +962,8 @@ def main():
     application.add_handler(CommandHandler("send_to_user", send_to_user))
 
     # New Commands
-    application.add_handler(CommandHandler("topxp", topxp_cmd))
-    application.add_handler(CommandHandler("toplvl", topxp_cmd))
     application.add_handler(CommandHandler("topcoins", topcoins_cmd))
     application.add_handler(CommandHandler("toprep", toprep_cmd))
-    application.add_handler(CommandHandler("getxp", getxp_cmd))
-    application.add_handler(CommandHandler("getlvl", getxp_cmd))
     application.add_handler(CommandHandler("getcoins", getcoins_cmd))
     application.add_handler(CommandHandler("getrep", getrep_cmd))
 
@@ -1123,7 +971,7 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("=" * 60)
-    print("🎭 SQUID GAME BOT - LITE EDITION")
+    print("🎭 BOT - LITE EDITION")
     print("=" * 60)
     print(f"✅ MongoDB: {'Connected' if mongodb_available else 'Offline'}")
     print(f"✅ Databases: {len(db_connections)}")
