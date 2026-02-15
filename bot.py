@@ -721,6 +721,18 @@ GAME_ANIMATIONS = {
     ],
 }
 
+async def send_level_up(user_id, first_name, new_level, context):
+    """Send level up notification"""
+    msg = f"🎉 LEVEL UP!\n\n[{first_name}](tg://user?id={user_id}) is now Level {new_level}!"
+    try:
+        await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=msg, parse_mode='Markdown')
+    except Exception:
+        pass
+    try:
+        await context.bot.send_message(chat_id=user_id, text=msg, parse_mode='Markdown')
+    except Exception:
+        pass
+
 def init_player(user_id):
     """Initialize new player"""
     player_data = load_player_from_db(user_id)
@@ -738,7 +750,7 @@ def init_player(user_id):
             'intelligence': random.randint(3, 8),
             'achievements': [],
             'death_count': 0,
-            'level': 0,
+            'level': 1,
             'exp': 0,
             'win_streak': 0,
             'highest_streak': 0,
@@ -756,27 +768,34 @@ def save_player(user_id, player_data):
     """Save player data"""
     save_player_to_db(user_id, player_data)
 
-async def add_experience(user_id, amount, update):
+async def add_experience(user_id, amount, context, first_name):
     """Add experience to user and check level up"""
     player_data = load_player_from_db(user_id)
     if not player_data:
         return
 
     if 'level' not in player_data:
-        player_data['level'] = 0
+        player_data['level'] = 1
     if 'exp' not in player_data:
         player_data['exp'] = 0
 
-    player_data['exp'] += amount
+    if player_data['level'] < 1:
+        player_data['level'] = 1
 
-    # Level calculation: Level n -> n+1 requires 100 * (2^n)
+    player_data['exp'] += amount
+    old_level = player_data['level']
+
+    # Level calculation: Level n -> n+1 requires 100 * (2^(n-1))
     while player_data['level'] < 200:
-        required_exp = 100 * (2 ** player_data['level'])
+        required_exp = 100 * (2 ** (player_data['level'] - 1))
         if player_data['exp'] >= required_exp:
             player_data['level'] += 1
             player_data['exp'] -= required_exp
         else:
             break
+
+    if player_data['level'] > old_level:
+        await send_level_up(user_id, first_name, player_data['level'], context)
 
     save_player(user_id, player_data)
 
@@ -833,7 +852,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     # Add experience for interaction
-    await add_experience(user_id, 2, update)
+    await add_experience(user_id, 2, context, query.from_user.first_name)
 
     player_data = init_player(user_id)
     
@@ -922,7 +941,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("💀 Dead!", show_alert=True)
             return
         game_key = random.choice(list(GAMES.keys()))
-        await play_game(query, game_key, user_id, player_data)
+        await play_game(query, game_key, user_id, player_data, context, query.from_user.first_name)
     
     # Profile
     elif data == 'profile':
@@ -1249,7 +1268,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         game_key = data.replace('game_', '')
         if game_key in GAMES:
-            await play_game(query, game_key, user_id, player_data)
+            await play_game(query, game_key, user_id, player_data, context, query.from_user.first_name)
     
     # Purchase
     elif data.startswith('buy_'):
@@ -1295,7 +1314,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
-async def play_game(query, game_key, user_id, player_data):
+async def play_game(query, game_key, user_id, player_data, context, first_name):
     """Play game with animations"""
     game = GAMES[game_key]
     
@@ -1371,15 +1390,20 @@ async def play_game(query, game_key, user_id, player_data):
         if player_data['win_streak'] > player_data['highest_streak']:
             player_data['highest_streak'] = player_data['win_streak']
         
+        if player_data['level'] < 1: player_data['level'] = 1
         player_data['exp'] += 100
+        old_level = player_data['level']
         while player_data['level'] < 200:
-            req_exp = 100 * (2 ** player_data['level'])
+            req_exp = 100 * (2 ** (player_data['level'] - 1))
             if player_data['exp'] >= req_exp:
                 player_data['level'] += 1
                 player_data['exp'] -= req_exp
             else:
                 break
         
+        if player_data['level'] > old_level:
+            await send_level_up(user_id, first_name, player_data['level'], context)
+
         if player_data['games_survived'] == 1 and 'first_blood' not in player_data['achievements']:
             player_data['achievements'].append('first_blood')
             player_data['money'] += 50000000
@@ -1435,7 +1459,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Add experience for chatting
     xp_amount = 2 if update.effective_chat.id == TARGET_GROUP_ID else 1
-    await add_experience(user_id, xp_amount, update)
+    await add_experience(user_id, xp_amount, context, update.effective_user.first_name)
 
     msg = update.message.text.lower()
     
