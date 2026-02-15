@@ -312,11 +312,11 @@ def calculate_xp_required(level):
 async def add_xp(user_id, amount, user_name, context):
     """Add XP to user and handle level up"""
     player_data = init_player(user_id, user_name)
-    
+
     player_data['xp'] += amount
     current_level = player_data['level']
     xp_needed = calculate_xp_required(current_level)
-    
+
     leveled_up = False
     while player_data['xp'] >= xp_needed:
         player_data['xp'] -= xp_needed
@@ -324,9 +324,9 @@ async def add_xp(user_id, amount, user_name, context):
         current_level = player_data['level']
         xp_needed = calculate_xp_required(current_level)
         leveled_up = True
-    
+
     save_player_to_db(user_id, player_data)
-    
+
     if leveled_up:
         try:
              await context.bot.send_message(
@@ -380,21 +380,33 @@ async def level_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show leaderboard"""
-    players = get_leaderboard(10)
+    """Show leaderboard (Top 200)"""
+    players = get_leaderboard(200)
 
     if not players:
         await update.message.reply_text("📉 No data yet.")
         return
 
-    msg = "🏆 **LEADERBOARD**\n\n"
+    header = "🏆 **LEADERBOARD (TOP 200)**\n\n"
+    msg_chunk = ""
+
     for i, p in enumerate(players, 1):
         name = p.get('name', 'Unknown')
+        # Escape markdown characters in name to prevent errors
+        name = name.replace("*", "").replace("_", "").replace("`", "")
         lvl = p.get('level', 1)
         xp = p.get('xp', 0)
-        msg += f"{i}. **{name}** - Lvl {lvl} ({xp} XP)\n"
+        line = f"{i}. **{name}** - Lvl {lvl} ({xp} XP)\n"
 
-    await update.message.reply_text(msg, parse_mode='Markdown')
+        if len(header + msg_chunk + line) > 4000:
+            await update.message.reply_text(header + msg_chunk, parse_mode='Markdown')
+            header = "" # Only show header on first message
+            msg_chunk = line
+        else:
+            msg_chunk += line
+
+    if msg_chunk:
+        await update.message.reply_text(header + msg_chunk, parse_mode='Markdown')
 
 @user_operation
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
