@@ -1,168 +1,74 @@
-# Telegram-Squid-game-bot-Kaustav-Ray
+# Telegram XP & Level Bot
 
-# .env
-BOT_TOKEN=YOUR_BOT_TOKEN_HERE
-PORT=8080
-MONGODB_URI_1=mongodb://localhost:27017/
-MONGODB_URI_2=mongodb+srv://user:pass@cluster1.mongodb.net/
-MONGODB_URI_3=mongodb+srv://user:pass@cluster2.mongodb.net/
-MONGODB_URI_4=mongodb+srv://user:pass@cluster3.mongodb.net/
+A simple yet engaging Telegram bot that gamifies group interactions. It tracks user activity in groups and awards XP (Experience Points) for every message sent. As users gain XP, they level up, with each level becoming progressively harder to reach.
 
-# Dockerfile
-FROM python:3.11-slim
+## 🚀 Features
 
-WORKDIR /app
+*   **Activity Tracking:** Monitors group messages and awards XP based on message length.
+*   **Leveling System:** Users level up as they accumulate XP.
+    *   **Scaling Difficulty:** The XP required for the next level increases quadratically, making high levels a true achievement.
+    *   **Unlimited Levels:** There is no cap on the maximum level a user can reach.
+*   **Leaderboard:** Displays the Top 200 active users sorted by Level and XP.
+*   **Persistence:** Uses MongoDB to store user progress securely.
+*   **Web Server:** Includes a built-in web server for uptime monitoring (compatible with Render, Railway, etc.).
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+## 🛠️ Commands
 
-COPY bot.py .
+*   `/start` - Initialize your profile and see basic info.
+*   `/level` - Check your current Level, XP, and progress to the next level.
+*   `/top` - View the Top 200 Leaderboard.
 
-CMD ["python", "bot.py"]
+## ⚙️ Installation & Setup
 
-# docker-compose.yml
-version: '3.8'
+### Prerequisites
 
-services:
-  bot:
-    build: .
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env
-    restart: unless-stopped
-    environment:
-      - BOT_TOKEN=${BOT_TOKEN}
-      - PORT=8080
-      - MONGODB_URI_1=${MONGODB_URI_1}
-      - MONGODB_URI_2=${MONGODB_URI_2}
-      - MONGODB_URI_3=${MONGODB_URI_3}
+*   Python 3.9+
+*   MongoDB Database (e.g., MongoDB Atlas)
+*   Telegram Bot Token (from @BotFather)
 
+### Local Setup
 
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd <repository-directory>
+    ```
 
-      // render.yaml (for Render.com deployment)
-{
-  "services": [
-    {
-      "type": "web",
-      "name": "squid-game-bot",
-      "env": "python",
-      "buildCommand": "pip install -r requirements.txt",
-      "startCommand": "python bot.py",
-      "envVars": [
-        {
-          "key": "BOT_TOKEN",
-          "sync": false
-        },
-        {
-          "key": "PORT",
-          "value": "8080"
-        },
-        {
-          "key": "MONGODB_URI_1",
-          "sync": false
-        },
-        {
-          "key": "MONGODB_URI_2",
-          "sync": false
-        }
-      ]
-    }
-  ]
-}
+2.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
+3.  **Configure the Bot:**
+    *   Open `bot.py` and update the `BOT_TOKEN` and `MONGODB_URIS` variables.
 
-# railway.json (for Railway deployment)
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "python bot.py",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
-  }
-}
+4.  **Run the Bot:**
+    ```bash
+    python bot.py
+    ```
 
+## 🏗️ Deployment
 
+This bot is ready for deployment on platforms like Render, Railway, or Heroku.
 
+**Docker:**
+A `Dockerfile` is included (ensure it copies `bot.py` and `requirements.txt`).
+```bash
+docker build -t xp-bot .
+docker run -p 8080:8080 xp-bot
+```
 
-📋 DEPLOYMENT INSTRUCTIONS:
-Method 1: Local
-bash
-pip install -r requirements.txt
-python bot.py
-Method 2: Docker
-bash
-docker-compose up -d
+## 📝 Configuration
 
+The following variables are configured in `bot.py`:
 
+*   `BOT_TOKEN`: Your Telegram Bot API Token.
+*   `MONGODB_URIS`: List of MongoDB connection strings.
+*   `WEB_SERVER_PORT`: Port for the web server (defaults to 8080).
 
-Method 3: Render.com (FREE)
-Push code to GitHub
+## 📊 Leveling Formula
 
-Connect Render to GitHub
+The XP required to reach the next level is calculated as:
+`XP_Required = (Current_Level^2) * 50 + (Current_Level * 100)`
 
-Create Web Service
-
-Add environment variables
-
-Deploy!
-
-Method 4: Railway (FREE)
-Push to GitHub
-
-Import on Railway
-
-Add env variables
-
-Deploy!
-
-Method 5: Heroku
-
-
-
-bash
-heroku create squid-game-bot
-heroku config:set BOT_TOKEN=your_token
-git push heroku main
-🌐 UPTIMEROBOT SETUP:
-Go to https://uptimerobot.com
-
-Create account (FREE)
-
-Add New Monitor
-
-Type: HTTP(s)
-
-URL: http://your-app-url/health
-
-Interval: 5 minutes
-
-Monitor! ✅
-
-✅ ALL FEATURES:
-
-✅ Web server on port 8080
-
-✅ Health check endpoint
-
-✅ Status monitoring
-
-✅ Stats dashboard
-
-✅ Multiple MongoDB URIs
-
-✅ Multi-user support
-
-✅ Button spam protection
-
-✅ User isolation
-
-✅ Automatic failover
-
-✅ Production ready!
-
-✅ NEW! Game animations – each game now has its own dramatic animation sequence
-
+This ensures a steep progression curve!
