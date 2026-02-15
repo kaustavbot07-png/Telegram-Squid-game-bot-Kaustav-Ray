@@ -452,6 +452,44 @@ async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(header + msg_chunk, parse_mode='Markdown')
 
 @user_operation
+async def changename_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Change user name"""
+    user = update.effective_user
+    args = context.args
+
+    if not args:
+        await update.message.reply_text("⚠️ Usage: /changename <new_name>")
+        return
+
+    new_name = " ".join(args).strip()
+
+    if len(new_name) > 50:
+        await update.message.reply_text("❌ Name is too long (max 50 chars).")
+        return
+
+    if len(new_name) < 2:
+        await update.message.reply_text("❌ Name is too short (min 2 chars).")
+        return
+
+    forbidden_names = ["iamkkronly", "Kaustav", "Ray", "filestore4u"]
+    if new_name.lower() in [name.lower() for name in forbidden_names]:
+        await update.message.reply_text("❌ This name is not allowed.")
+        return
+
+    # Update in DB
+    player_data = await init_player(user, context)
+    player_data['name'] = new_name
+    save_player_to_db(user.id, player_data)
+
+    # Escape markdown characters in name to prevent errors
+    safe_new_name = new_name.replace("*", "").replace("_", "").replace("`", "")
+
+    await update.message.reply_text(
+        f"✅ Your name has been changed to: **{safe_new_name}**",
+        parse_mode='Markdown'
+    )
+
+@user_operation
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle messages to award XP"""
     if not update.effective_user or update.effective_user.is_bot:
@@ -474,6 +512,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("level", level_cmd))
     application.add_handler(CommandHandler("top", top_cmd))
+    application.add_handler(CommandHandler("changename", changename_cmd))
 
     # Message Handler (for XP)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
