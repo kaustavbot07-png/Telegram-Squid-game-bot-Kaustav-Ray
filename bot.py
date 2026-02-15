@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = "5966719769:AAEilFOlMwwEUOUFXBmmgQL11NpKMliuXbs"
 ADMIN_ID = 5915172170
 TARGET_GROUP_ID = -1001234567890  # Replace with actual group ID
+LOG_CHANNEL_ID = -1003774210935
 
 # Web Server Configuration
 WEB_SERVER_PORT = int(os.environ.get("PORT", 8080))
@@ -274,8 +275,12 @@ def get_leaderboard(limit=10):
         logger.error(f"Error getting leaderboard: {e}")
         return []
 
-def init_player(user_id, first_name="User"):
+async def init_player(user, context):
     """Initialize new player or get existing"""
+    user_id = user.id
+    first_name = user.first_name
+    username = user.username or "None"
+
     player_data = load_player_from_db(user_id)
     
     if player_data is None:
@@ -287,6 +292,26 @@ def init_player(user_id, first_name="User"):
             'created_at': datetime.utcnow()
         }
         save_player_to_db(user_id, player_data)
+
+        # Log new user
+        try:
+            safe_first_name = first_name.replace("*", "").replace("_", "").replace("`", "").replace("[", "").replace("]", "")
+            safe_username = username.replace("*", "").replace("_", "").replace("`", "").replace("[", "").replace("]", "")
+
+            log_msg = (
+                f"🆕 **New User Joined!**\n"
+                f"👤 Name: [{safe_first_name}](tg://user?id={user_id})\n"
+                f"🆔 ID: `{user_id}`\n"
+                f"🔗 Username: @{safe_username}"
+            )
+            await context.bot.send_message(
+                chat_id=LOG_CHANNEL_ID,
+                text=log_msg,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Failed to log new user: {e}")
+
     else:
         # Ensure fields exist if updating from old version
         if 'xp' not in player_data:
@@ -309,9 +334,11 @@ def calculate_xp_required(level):
     """
     return (level ** 2) * 50 + (level * 100)
 
-async def add_xp(user_id, amount, user_name, context):
+async def add_xp(user, amount, context):
     """Add XP to user and handle level up"""
-    player_data = init_player(user_id, user_name)
+    user_id = user.id
+
+    player_data = await init_player(user, context)
 
     player_data['xp'] += amount
     current_level = player_data['level']
@@ -328,6 +355,7 @@ async def add_xp(user_id, amount, user_name, context):
     save_player_to_db(user_id, player_data)
 
     if leveled_up:
+        # Notify user
         try:
              await context.bot.send_message(
                 chat_id=user_id,
@@ -338,16 +366,32 @@ async def add_xp(user_id, amount, user_name, context):
             # User might have blocked the bot or chat not found
             pass
 
+        # Log level up
+        try:
+            safe_first_name = user.first_name.replace("*", "").replace("_", "").replace("`", "").replace("[", "").replace("]", "")
+
+            log_msg = (
+                f"🆙 **Level Up!**\n"
+                f"👤 User: [{safe_first_name}](tg://user?id={user_id})\n"
+                f"🌟 New Level: **{player_data['level']}**"
+            )
+            await context.bot.send_message(
+                chat_id=LOG_CHANNEL_ID,
+                text=log_msg,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Failed to log level up: {e}")
+
 # ==================== BOT HANDLERS ====================
 @user_operation
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command"""
-    user_id = update.effective_user.id
-    user_name = update.effective_user.first_name
-    init_player(user_id, user_name)
+    user = update.effective_user
+    await init_player(user, context)
     
     await update.message.reply_text(
-        f"👋 Hello {user_name}!\n\n"
+        f"👋 Hello {user.first_name}!\n\n"
         f"I am tracking your activity.\n"
         f"Every message you send earns you XP.\n"
         f"Level up and compete with others!\n\n"
@@ -359,9 +403,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def level_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check current level and XP"""
-    user_id = update.effective_user.id
-    user_name = update.effective_user.first_name
-    player_data = init_player(user_id, user_name)
+    user = update.effective_user
+    player_data = await init_player(user, context)
 
     lvl = player_data['level']
     xp = player_data['xp']
@@ -372,7 +415,7 @@ async def level_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bar = "█" * progress + "░" * (progress_bar_length - progress)
     
     await update.message.reply_text(
-        f"👤 **{user_name}**\n\n"
+        f"👤 **{user.first_name}**\n\n"
         f"🔰 Level: **{lvl}**\n"
         f"✨ XP: **{xp}/{req_xp}**\n"
         f"[{bar}]",
@@ -414,14 +457,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user or update.effective_user.is_bot:
         return
 
-    user_id = update.effective_user.id
-    user_name = update.effective_user.first_name
+    user = update.effective_user
 
     # Calculate random XP based on message length, but capped
     msg_len = len(update.message.text) if update.message.text else 0
     xp_gain = min(50, max(5, int(msg_len / 2))) # Min 5, Max 50 XP
 
-    await add_xp(user_id, xp_gain, user_name, context)
+    await add_xp(user, xp_gain, context)
 
 # ==================== MAIN ====================
 def main():
