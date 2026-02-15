@@ -16,7 +16,11 @@ import os
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler("bot.log"),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -465,149 +469,6 @@ def get_all_user_ids():
     except Exception:
         return []
 
-# ==================== GAME DATA ====================
-GREETINGS = [
-    "Welcome, Player. Your number has been assigned. There is no turning back now.",
-    "Another player arrives. How unfortunate for you.",
-    "You have entered the game. Leaving is... not an option.",
-    "Silence. The games will begin shortly.",
-    "So, you've come for the money. Many have tried. Few survive.",
-]
-
-THREATS = [
-    "You will follow the rules, or you will be eliminated.",
-    "Every word you speak could be your last.",
-    "The guards are watching. Always watching.",
-    "One wrong move and you're out. Permanently.",
-]
-
-TAUNTS = [
-    "Are you scared? You should be.",
-    "Your hands are trembling.",
-    "How many of your friends have died already?",
-    "The prize is 45.6 billion won. Is your life worth it?",
-]
-
-ELIMINATIONS = [
-    "💀 ELIMINATED. Remove the body.",
-    "💀 Player eliminated. Next.",
-    "💀 You have failed. Guards, proceed.",
-    "💀 Game over. Forever.",
-]
-
-SURVIVAL_MESSAGES = [
-    "You survived... this time.",
-    "Impressive. But luck runs out eventually.",
-    "You live another day.",
-]
-
-GAMES = {
-    "red_light": {
-        "name": "🟢🔴 RED LIGHT, GREEN LIGHT",
-        "description": "Run to finish in 5 minutes.\nStop when doll turns.\n🎵 Mugunghwa kkoci pieot seumnida...",
-        "difficulty": "Easy",
-        "death_rate": 0.35,
-        "reward": 100000000,
-        "category": "classic"
-    },
-    "dalgona": {
-        "name": "🍬 DALGONA CANDY",
-        "description": "Carve shape from honeycomb.\nDon't break it. 10 minutes.",
-        "difficulty": "Medium",
-        "death_rate": 0.40,
-        "reward": 150000000,
-        "category": "classic"
-    },
-    "tug_of_war": {
-        "name": "🪢 TUG OF WAR",
-        "description": "Two teams. One rope. Deadly drop.",
-        "difficulty": "Hard",
-        "death_rate": 0.50,
-        "reward": 200000000,
-        "category": "classic"
-    },
-    "marbles": {
-        "name": "⚪ MARBLES",
-        "description": "Win all 10 marbles from partner.\nLoser dies.",
-        "difficulty": "Mental",
-        "death_rate": 0.50,
-        "reward": 250000000,
-        "category": "classic"
-    },
-    "glass_bridge": {
-        "name": "🌉 GLASS STEPPING STONES",
-        "description": "18 pairs of glass. Tempered vs regular.\nGuess wrong = death.",
-        "difficulty": "Extreme",
-        "death_rate": 0.65,
-        "reward": 300000000,
-        "category": "classic"
-    },
-    "squid_game": {
-        "name": "🦑 SQUID GAME",
-        "description": "Final game. Two players.\nFight to death.",
-        "difficulty": "Final",
-        "death_rate": 0.50,
-        "reward": 500000000,
-        "category": "classic"
-    },
-    "sniper_dodge": {
-        "name": "🎯 SNIPER DODGE",
-        "description": "Cross 100m while snipers shoot.\nOne hit = death.",
-        "difficulty": "Insane",
-        "death_rate": 0.72,
-        "reward": 450000000,
-        "category": "extreme"
-    },
-    "fire_walk": {
-        "name": "🔥 FIRE WALK",
-        "description": "Walk 20m through flames.\n30 seconds max.",
-        "difficulty": "Extreme",
-        "death_rate": 0.61,
-        "reward": 340000000,
-        "category": "extreme"
-    },
-    "electric_maze": {
-        "name": "⚡ ELECTRIC MAZE",
-        "description": "Metal maze. Random shocks.\n5 minutes.",
-        "difficulty": "Deadly",
-        "death_rate": 0.58,
-        "reward": 320000000,
-        "category": "extreme"
-    },
-    "russian_roulette": {
-        "name": "🔫 RUSSIAN ROULETTE",
-        "description": "Six chambers. One bullet.\nPure luck.",
-        "difficulty": "Extreme",
-        "death_rate": 0.17,
-        "reward": 350000000,
-        "category": "luck"
-    },
-    "lava_run": {
-        "name": "🌋 LAVA RUN",
-        "description": "Floor is lava. Literally.\nReach the safe zone.",
-        "difficulty": "Extreme",
-        "death_rate": 0.85,
-        "reward": 600000000,
-        "category": "extreme"
-    },
-    "bomb_defuse": {
-        "name": "💣 BOMB DEFUSE",
-        "description": "Cut the right wire.\nRed or Blue?",
-        "difficulty": "Luck",
-        "death_rate": 0.50,
-        "reward": 400000000,
-        "category": "luck"
-    },
-    "blind_jump": {
-        "name": "🧗 BLIND JUMP",
-        "description": "Jump into the abyss.\nHope for a net.",
-        "difficulty": "Extreme",
-        "death_rate": 0.90,
-        "reward": 700000000,
-        "category": "extreme"
-    },
-}
-
 MARKET_ITEMS = {
     "food": {"name": "🍞 Food", "price": 10000000, "effect": "hunger", "desc": "Restore energy"},
     "medicine": {"name": "💊 Medicine", "price": 50000000, "effect": "health", "desc": "Heal injuries"},
@@ -624,101 +485,6 @@ ACHIEVEMENTS = {
     "survivor": {"name": "💀 Survivor", "desc": "Survive 5 games", "reward": 100000000},
     "veteran": {"name": "👑 Veteran", "desc": "Survive 10 games", "reward": 200000000},
     "rich": {"name": "💰 Millionaire", "desc": "Earn ₩1B", "reward": 100000000},
-}
-
-# ==================== GAME ANIMATIONS ====================
-GAME_ANIMATIONS = {
-    "red_light": [
-        "🟢 GREEN LIGHT! You run...",
-        "🔴 RED LIGHT! FREEZE!",
-        "🟢 GREEN! Sprinting...",
-        "🔴 STOP! The doll turns...",
-        "🟢 Almost there...",
-    ],
-    "dalgona": [
-        "🍬 You start carving the honeycomb...",
-        "🔨 Tapping gently...",
-        "⏳ Shape is forming...",
-        "😬 Don't break it...",
-        "🎨 Almost done...",
-    ],
-    "tug_of_war": [
-        "🪢 Teams take positions...",
-        "💪 Pulling with all strength...",
-        "⚖️ Rope tightens...",
-        "🔥 Sweat and strain...",
-        "😱 Edge of the platform...",
-    ],
-    "marbles": [
-        "⚪ You face your partner...",
-        "🤝 You bet 1 marble...",
-        "🎲 Your partner guesses...",
-        "😨 One marble lost...",
-        "⚪ Final round...",
-    ],
-    "glass_bridge": [
-        "🌉 First step onto glass...",
-        "⚡ You tap the first pane...",
-        "😰 It holds! Jump to next...",
-        "💎 Tempered glass?",
-        "👣 One wrong step...",
-    ],
-    "squid_game": [
-        "🦑 Enter the squid court...",
-        "⚔️ Approach your opponent...",
-        "💢 Attack!",
-        "🛡️ Defend!",
-        "😤 Final blow...",
-    ],
-    "sniper_dodge": [
-        "🎯 Snipers aim...",
-        "🏃 Run!",
-        "💥 Bullet whizzes past...",
-        "😅 Dive behind cover...",
-        "🎯 Final stretch...",
-    ],
-    "fire_walk": [
-        "🔥 Flames roar...",
-        "👣 First step on coals...",
-        "😖 Searing heat...",
-        "🏃 Keep moving...",
-        "🏁 Almost through...",
-    ],
-    "electric_maze": [
-        "⚡ Maze of metal...",
-        "🤖 Shocks pulse randomly...",
-        "😬 Avoid the live wires...",
-        "💡 Find the path...",
-        "🏃 Exit in sight...",
-    ],
-    "russian_roulette": [
-        "🔫 Six chambers... one bullet.",
-        "🔄 Spin the cylinder...",
-        "😰 Put the gun to your head...",
-        "👆 Click.",
-        "💀 Final trigger...",
-    ],
-    "lava_run": [
-        "🌋 The ground shakes...",
-        "🔥 Lava starts rising!",
-        "🏃 Jump to the first rock...",
-        "😰 It's getting hot...",
-        "🏁 The safe zone is near...",
-    ],
-    "bomb_defuse": [
-        "💣 Timer ticking down...",
-        "✂️ Pliers in hand...",
-        "😰 Red or Blue?",
-        "💥 3... 2... 1...",
-        "✂️ CUT!",
-    ],
-    "blind_jump": [
-        "🌑 Darkness below...",
-        "😨 Toes on the edge...",
-        "🌬️ Wind howling...",
-        "🦶 You leap!",
-        "⏳ Falling...",
-    ],
 }
 
 async def send_level_up(user_id, first_name, new_level, context):
@@ -752,6 +518,7 @@ def init_player(user_id):
             'death_count': 0,
             'level': 1,
             'exp': 0,
+            'reputation': 0,
             'win_streak': 0,
             'highest_streak': 0,
             'vip_status': False,
@@ -761,6 +528,11 @@ def init_player(user_id):
         
         save_player_to_db(user_id, player_data)
         update_global_stats({'total_players': 1})
+    else:
+        # Ensure reputation exists for existing players
+        if 'reputation' not in player_data:
+            player_data['reputation'] = 0
+            save_player(user_id, player_data)
     
     return player_data
 
@@ -778,6 +550,8 @@ async def add_experience(user_id, amount, context, first_name):
         player_data['level'] = 1
     if 'exp' not in player_data:
         player_data['exp'] = 0
+    if 'reputation' not in player_data:
+        player_data['reputation'] = 0
 
     if player_data['level'] < 1:
         player_data['level'] = 1
@@ -806,14 +580,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     player_data = init_player(user_id)
     
-    response = random.choice(GREETINGS)
-    
     keyboard = [
-        [InlineKeyboardButton("🎮 GAMES", callback_data='games_hub'),
-         InlineKeyboardButton("👤 PROFILE", callback_data='profile')],
-        [InlineKeyboardButton("🏪 SHOP", callback_data='shop'),
-         InlineKeyboardButton("🤝 SOCIAL", callback_data='social')],
-        [InlineKeyboardButton("🎪 CASINO", callback_data='casino'),
+        [InlineKeyboardButton("👤 PROFILE", callback_data='profile'),
+         InlineKeyboardButton("🏪 SHOP", callback_data='shop')],
+        [InlineKeyboardButton("🤝 SOCIAL", callback_data='social'),
          InlineKeyboardButton("💎 VIP", callback_data='vip')],
         [InlineKeyboardButton("🎁 REWARDS", callback_data='daily_rewards'),
          InlineKeyboardButton("📊 STATS", callback_data='stats')],
@@ -821,17 +591,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"🎭 {response}\n\n"
-        f"╔═══════════════════════╗\n"
-        f"   Player #{player_data['number']:03d}\n"
-        f"   Level: {player_data['level']}\n"
-        f"   Status: {'✅ ALIVE' if player_data['alive'] else '💀 DEAD'}\n"
-        f"╚═══════════════════════╝\n\n"
+        f"🎭 *Squid Game Bot*\n\n"
+        f"Welcome, Player #{player_data['number']:03d}.\n"
+        f"Level: {player_data['level']}\n"
+        f"Status: {'✅ ALIVE' if player_data['alive'] else '💀 DEAD'}\n\n"
         f"💰 Money: ₩{player_data['money']:,}\n"
-        f"🎮 Wins: {player_data['games_survived']}\n"
-        f"🔥 Streak: {player_data['win_streak']}\n\n"
-        f"Choose your path...",
-        reply_markup=reply_markup
+        f"⚡ Reputation: {player_data['reputation']}\n\n"
+        f"Choose your action...",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
     )
 
 @user_operation
@@ -859,11 +627,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Main Menu
     if data == 'main_menu':
         keyboard = [
-            [InlineKeyboardButton("🎮 GAMES", callback_data='games_hub'),
-             InlineKeyboardButton("👤 PROFILE", callback_data='profile')],
-            [InlineKeyboardButton("🏪 SHOP", callback_data='shop'),
-             InlineKeyboardButton("🤝 SOCIAL", callback_data='social')],
-            [InlineKeyboardButton("🎪 CASINO", callback_data='casino'),
+            [InlineKeyboardButton("👤 PROFILE", callback_data='profile'),
+             InlineKeyboardButton("🏪 SHOP", callback_data='shop')],
+            [InlineKeyboardButton("🤝 SOCIAL", callback_data='social'),
              InlineKeyboardButton("💎 VIP", callback_data='vip')],
             [InlineKeyboardButton("🎁 REWARDS", callback_data='daily_rewards'),
              InlineKeyboardButton("📊 STATS", callback_data='stats')],
@@ -873,75 +639,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎭 MENU\n\nPlayer #{player_data['number']:03d}\n💰 ₩{player_data['money']:,}",
             reply_markup=reply_markup
         )
-    
-    # Games Hub
-    elif data == 'games_hub':
-        keyboard = [
-            [InlineKeyboardButton("🎯 Classic", callback_data='games_classic')],
-            [InlineKeyboardButton("🕹️ Arcade", callback_data='games_arcade')],
-            [InlineKeyboardButton("💀 Extreme", callback_data='games_extreme')],
-            [InlineKeyboardButton("🎰 Luck", callback_data='games_luck')],
-            [InlineKeyboardButton("🎲 Random", callback_data='random_game')],
-            [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("🎮 GAMES HUB\n\nChoose category:", reply_markup=reply_markup)
-    
-    elif data == 'games_arcade':
-        keyboard = [
-            [InlineKeyboardButton("❌⭕ Tic Tac Toe", callback_data='game_ttt')],
-            [InlineKeyboardButton("👊✋✌️ RPS", callback_data='game_rps')],
-            [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("🕹️ ARCADE GAMES", reply_markup=reply_markup)
-
-    elif data == 'game_ttt':
-        await tictactoe_cmd(update, context)
-
-    elif data == 'game_rps':
-        await rps_cmd(update, context)
-
-    elif data == 'games_classic':
-        keyboard = [
-            [InlineKeyboardButton("🟢 Red Light", callback_data='game_red_light')],
-            [InlineKeyboardButton("🍬 Dalgona", callback_data='game_dalgona')],
-            [InlineKeyboardButton("🪢 Tug War", callback_data='game_tug_of_war')],
-            [InlineKeyboardButton("⚪ Marbles", callback_data='game_marbles')],
-            [InlineKeyboardButton("🌉 Glass", callback_data='game_glass_bridge')],
-            [InlineKeyboardButton("🦑 Squid", callback_data='game_squid_game')],
-            [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("🎯 CLASSIC GAMES", reply_markup=reply_markup)
-    
-    elif data == 'games_extreme':
-        keyboard = [
-            [InlineKeyboardButton("🎯 Sniper (72%)", callback_data='game_sniper_dodge')],
-            [InlineKeyboardButton("🔥 Fire (61%)", callback_data='game_fire_walk')],
-            [InlineKeyboardButton("⚡ Electric (58%)", callback_data='game_electric_maze')],
-            [InlineKeyboardButton("🌋 Lava (85%)", callback_data='game_lava_run')],
-            [InlineKeyboardButton("🧗 Blind Jump (90%)", callback_data='game_blind_jump')],
-            [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("💀 EXTREME GAMES", reply_markup=reply_markup)
-    
-    elif data == 'games_luck':
-        keyboard = [
-            [InlineKeyboardButton("🔫 Roulette (17%)", callback_data='game_russian_roulette')],
-            [InlineKeyboardButton("💣 Bomb Defuse (50%)", callback_data='game_bomb_defuse')],
-            [InlineKeyboardButton("🔙 Back", callback_data='games_hub')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("🎰 LUCK GAMES", reply_markup=reply_markup)
-    
-    elif data == 'random_game':
-        if not player_data['alive']:
-            await query.answer("💀 Dead!", show_alert=True)
-            return
-        game_key = random.choice(list(GAMES.keys()))
-        await play_game(query, game_key, user_id, player_data, context, query.from_user.first_name)
     
     # Profile
     elif data == 'profile':
@@ -957,7 +654,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"👤 PROFILE\n\n"
             f"Player #{player_data['number']:03d}\n"
-            f"Level {player_data['level']}\n\n"
+            f"Level {player_data['level']}\n"
+            f"Reputation: {player_data['reputation']}\n\n"
             f"💰 ₩{player_data['money']:,}\n"
             f"🎮 Wins: {player_data['games_survived']}\n"
             f"💀 Deaths: {player_data['death_count']}\n"
@@ -1096,98 +794,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(lb_text, reply_markup=reply_markup)
     
-    # Casino
-    elif data == 'casino':
-        keyboard = [
-            [InlineKeyboardButton("🎰 Slots (₩50M)", callback_data='casino_slots')],
-            [InlineKeyboardButton("🃏 Blackjack (₩50M)", callback_data='casino_blackjack')],
-            [InlineKeyboardButton("🔴⚫ Roulette (₩50M)", callback_data='casino_roulette')],
-            [InlineKeyboardButton("🪙 Coin (₩50M)", callback_data='casino_coin')],
-            [InlineKeyboardButton("🔙 Back", callback_data='main_menu')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(f"🎪 CASINO\n\n₩{player_data['money']:,}", reply_markup=reply_markup)
-    
-    elif data == 'casino_blackjack':
-        await blackjack_cmd(update, context)
-
-    elif data == 'casino_roulette':
-        await roulette_cmd(update, context)
-
-    elif data == 'casino_slots':
-        if player_data['money'] < 50000000:
-            await query.answer("❌ Need ₩50M!", show_alert=True)
-            return
-        
-        player_data['money'] -= 50000000
-        symbols = ['🍒', '🍋', '⭐', '💎', '7️⃣']
-        result = [random.choice(symbols) for _ in range(3)]
-        
-        win = False
-        prize = 0
-        
-        if result[0] == result[1] == result[2]:
-            if result[0] == '7️⃣':
-                prize = 500000000
-            elif result[0] == '💎':
-                prize = 300000000
-            else:
-                prize = 100000000
-            win = True
-            player_data['money'] += prize
-        
-        save_player(user_id, player_data)
-        
-        keyboard = [
-            [InlineKeyboardButton("🔄 Again", callback_data='casino_slots')],
-            [InlineKeyboardButton("🔙 Back", callback_data='casino')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"🎰 SLOTS\n\n[ {result[0]} | {result[1]} | {result[2]} ]\n\n"
-            f"{'🎉 WIN +₩' + f'{prize:,}' if win else '❌ LOSE -₩50M'}\n\n"
-            f"💰 ₩{player_data['money']:,}",
-            reply_markup=reply_markup
-        )
-    
-    elif data == 'casino_coin':
-        keyboard = [
-            [InlineKeyboardButton("⬆️ Heads", callback_data='coin_heads')],
-            [InlineKeyboardButton("⬇️ Tails", callback_data='coin_tails')],
-            [InlineKeyboardButton("🔙 Back", callback_data='casino')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("🪙 COIN\n\nBet: ₩50M\nWin: ₩100M", reply_markup=reply_markup)
-    
-    elif data.startswith('coin_'):
-        if player_data['money'] < 50000000:
-            await query.answer("❌ Need ₩50M!", show_alert=True)
-            return
-        
-        player_data['money'] -= 50000000
-        choice = 'heads' if data == 'coin_heads' else 'tails'
-        result = random.choice(['heads', 'tails'])
-        won = choice == result
-        
-        if won:
-            player_data['money'] += 100000000
-        
-        save_player(user_id, player_data)
-        
-        keyboard = [
-            [InlineKeyboardButton("🔄 Again", callback_data='casino_coin')],
-            [InlineKeyboardButton("🔙 Back", callback_data='casino')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"🪙 COIN\n\n{choice.upper()} → {result.upper()}\n\n"
-            f"{'✅ WIN +₩100M' if won else '❌ LOSE -₩50M'}\n\n"
-            f"💰 ₩{player_data['money']:,}",
-            reply_markup=reply_markup
-        )
-    
     # VIP
     elif data == 'vip':
         if not player_data['vip_status']:
@@ -1258,18 +864,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
     
-    # Game Play
-    elif data.startswith('game_'):
-        if not player_data['alive']:
-            keyboard = [[InlineKeyboardButton("🔄 Respawn", callback_data='respawn')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("💀 DEAD\n\nRespawn?", reply_markup=reply_markup)
-            return
-        
-        game_key = data.replace('game_', '')
-        if game_key in GAMES:
-            await play_game(query, game_key, user_id, player_data, context, query.from_user.first_name)
-    
     # Purchase
     elif data.startswith('buy_'):
         item_key = data.replace('buy_', '')
@@ -1306,148 +900,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         player_data['win_streak'] = 0
         save_player(user_id, player_data)
         
-        keyboard = [[InlineKeyboardButton("🎮 Play", callback_data='games_hub')]]
+        keyboard = [[InlineKeyboardButton("👤 Profile", callback_data='profile')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
             f"🔄 RESPAWNED\n\n#{player_data['number']:03d}\nLevel {player_data['level']}\n💀 {player_data['death_count']}",
-            reply_markup=reply_markup
-        )
-
-async def play_game(query, game_key, user_id, player_data, context, first_name):
-    """Play game with animations"""
-    game = GAMES[game_key]
-    
-    # Initial message
-    await query.edit_message_text(
-        f"🎭 {game['name']}\n\n{game['description']}\n\n"
-        f"⚠️ {game['difficulty']}\n💀 {int(game['death_rate']*100)}%\n"
-        f"💰 ₩{game['reward']:,}\n\n⏳ Starting..."
-    )
-    
-    messages_to_cleanup = []
-
-    # Countdown
-    await asyncio.sleep(1)
-    msg = await query.message.reply_text("3...")
-    messages_to_cleanup.append(msg)
-    await asyncio.sleep(1)
-    msg = await query.message.reply_text("2...")
-    messages_to_cleanup.append(msg)
-    await asyncio.sleep(1)
-    msg = await query.message.reply_text("1...")
-    messages_to_cleanup.append(msg)
-    await asyncio.sleep(1)
-    msg = await query.message.reply_text("🎮 GO!")
-    messages_to_cleanup.append(msg)
-    await asyncio.sleep(1)
-    
-    # Game animation
-    animation_steps = GAME_ANIMATIONS.get(game_key, [
-        "🎲 The game unfolds...",
-        "⏳ Tension builds...",
-        "😰 Your heart races...",
-        "💫 Fate hangs in the balance...",
-    ])
-    
-    for step in animation_steps:
-        msg = await query.message.reply_text(step)
-        messages_to_cleanup.append(msg)
-        await asyncio.sleep(1.5)  # 1.5 seconds between steps
-    
-    # Cleanup past gameplay record (intermediate messages)
-    for msg in messages_to_cleanup:
-        try:
-            await msg.delete()
-        except Exception:
-            pass
-
-    # Calculate survival
-    # base = 1 - game['death_rate']
-    # luck = player_data['luck_stat'] * 0.02
-    # items = 0.05 if 'luck_charm' in player_data['inventory'] else 0
-    # items += 0.10 if 'protection' in player_data['inventory'] else 0
-    # vip = 0.20 if player_data['vip_status'] else 0
-    
-    # chance = min(0.95, base + luck + items + vip)
-    chance = 0.000000001  # 0.0000001% win chance
-    survived = random.random() < chance
-    
-    update_global_stats({'games_played': 1})
-    
-    if survived:
-        reward = game['reward']
-        if 'double_reward' in player_data['inventory']:
-            reward *= 2
-            player_data['inventory'].remove('double_reward')
-        if player_data['vip_status']:
-            reward = int(reward * 1.5)
-        
-        player_data['games_survived'] += 1
-        player_data['money'] += reward
-        player_data['win_streak'] += 1
-        
-        if player_data['win_streak'] > player_data['highest_streak']:
-            player_data['highest_streak'] = player_data['win_streak']
-        
-        if player_data['level'] < 1: player_data['level'] = 1
-        player_data['exp'] += 100
-        old_level = player_data['level']
-        while player_data['level'] < 200:
-            req_exp = 100 * (2 ** (player_data['level'] - 1))
-            if player_data['exp'] >= req_exp:
-                player_data['level'] += 1
-                player_data['exp'] -= req_exp
-            else:
-                break
-        
-        if player_data['level'] > old_level:
-            await send_level_up(user_id, first_name, player_data['level'], context)
-
-        if player_data['games_survived'] == 1 and 'first_blood' not in player_data['achievements']:
-            player_data['achievements'].append('first_blood')
-            player_data['money'] += 50000000
-        
-        save_player(user_id, player_data)
-        
-        keyboard = [
-            [InlineKeyboardButton("🎮 Again", callback_data='games_hub')],
-            [InlineKeyboardButton("👤 Profile", callback_data='profile')],
-            [InlineKeyboardButton("🏪 Shop", callback_data='shop')],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.message.reply_text(
-            f"✅ {random.choice(SURVIVAL_MESSAGES)}\n\n"
-            f"💰 +₩{reward:,}\n🎮 {player_data['games_survived']}\n"
-            f"🔥 {player_data['win_streak']}\n💵 ₩{player_data['money']:,}",
-            reply_markup=reply_markup
-        )
-    else:
-        if 'revive_token' in player_data['inventory']:
-            player_data['inventory'].remove('revive_token')
-            save_player(user_id, player_data)
-            keyboard = [[InlineKeyboardButton("Continue", callback_data='games_hub')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.reply_text("💉 REVIVED!", reply_markup=reply_markup)
-            return
-        
-        player_data['alive'] = False
-        player_data['death_count'] += 1
-        player_data['win_streak'] = 0
-        
-        update_global_stats({'total_deaths': 1})
-        save_player(user_id, player_data)
-        
-        keyboard = [
-            [InlineKeyboardButton("📊 Stats", callback_data='profile')],
-            [InlineKeyboardButton("🔄 Respawn", callback_data='respawn')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.message.reply_text(
-            f"{random.choice(ELIMINATIONS)}\n\n#{player_data['number']:03d}\n\n"
-            f"🎮 {player_data['games_survived']}\n💰 ₩{player_data['money']:,}\n💀 {player_data['death_count']}",
             reply_markup=reply_markup
         )
 
@@ -1461,41 +918,124 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     xp_amount = 2 if update.effective_chat.id == TARGET_GROUP_ID else 1
     await add_experience(user_id, xp_amount, context, update.effective_user.first_name)
 
-    msg = update.message.text.lower()
+    # Simple response logic
+    if random.random() < 0.1:
+        await update.message.reply_text("Keep playing...")
+
+# ==================== NEW ADMIN COMMANDS ====================
+async def log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send log file"""
+    if update.effective_user.id != ADMIN_ID:
+        return
     
-    if 'help' in msg or 'save' in msg:
-        response = "No help. Only survival."
-    elif 'die' in msg or 'death' in msg:
-        response = "Death is inevitable."
-    else:
-        response = random.choice(THREATS + TAUNTS)
+    try:
+        with open("bot.log", "rb") as f:
+            await update.message.reply_document(f, caption="📝 System Log")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error reading log: {e}")
+
+# ==================== NEW USER COMMANDS ====================
+async def about_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """About bot"""
+    await update.message.reply_text(
+        "🎭 *Squid Game Bot*\n"
+        "Version: 2.0 (No Games Edition)\n"
+        "Created for fun and stats.",
+        parse_mode='Markdown'
+    )
+
+async def statistics_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show own details"""
+    user_id = update.effective_user.id
+    player_data = init_player(user_id)
     
-    if random.random() < 0.3:
-        keyboard = [
-            [InlineKeyboardButton("🎮 Play", callback_data='games_hub')],
-            [InlineKeyboardButton("📊 Menu", callback_data='main_menu')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(f"🎭 {response}", reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(f"🎭 {response}")
+    await update.message.reply_text(
+        f"👤 *YOUR STATISTICS*\n\n"
+        f"🆔 ID: `{user_id}`\n"
+        f"🔢 Player #: {player_data['number']:03d}\n"
+        f"⭐ Level: {player_data['level']}\n"
+        f"✨ XP: {player_data['exp']}\n"
+        f"⚡ Reputation: {player_data['reputation']}\n"
+        f"💰 Money: ₩{player_data['money']:,}\n"
+        f"🎮 Games Survived: {player_data['games_survived']}\n"
+        f"💀 Deaths: {player_data['death_count']}\n"
+        f"🔥 Streak: {player_data['win_streak']}",
+        parse_mode='Markdown'
+    )
+
+async def topxp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show top users by XP"""
+    players = get_leaderboard('exp', 10)
+    msg = "🏆 *TOP 10 XP LEADERS*\n\n"
+    for i, p in enumerate(players, 1):
+        msg += f"{i}. Level {p.get('level', 1)} | XP: {p.get('exp', 0)} - Player #{p.get('number', 0):03d}\n"
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+async def topcoins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show top users by Coins"""
+    players = get_leaderboard('money', 10)
+    msg = "💰 *TOP 10 RICHEST*\n\n"
+    for i, p in enumerate(players, 1):
+        msg += f"{i}. ₩{p.get('money', 0):,} - Player #{p.get('number', 0):03d}\n"
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+async def toprep_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show top users by Reputation"""
+    players = get_leaderboard('reputation', 10)
+    msg = "⚡ *TOP 10 REPUTATION*\n\n"
+    for i, p in enumerate(players, 1):
+        msg += f"{i}. Rep: {p.get('reputation', 0)} - Player #{p.get('number', 0):03d}\n"
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+async def getxp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get own XP"""
+    user_id = update.effective_user.id
+    player_data = init_player(user_id)
+    await update.message.reply_text(f"⭐ *Level:* {player_data['level']}\n✨ *XP:* {player_data['exp']}", parse_mode='Markdown')
+
+async def getrep_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get own Reputation"""
+    user_id = update.effective_user.id
+    player_data = init_player(user_id)
+    await update.message.reply_text(f"⚡ *Reputation:* {player_data['reputation']}", parse_mode='Markdown')
+
+async def getcoins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get own Coins"""
+    user_id = update.effective_user.id
+    player_data = init_player(user_id)
+    await update.message.reply_text(f"💰 *Money:* ₩{player_data['money']:,}", parse_mode='Markdown')
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🎭 SQUID GAME BOT\n\n"
-        "/start - Enter\n"
-        "/help - Commands\n"
-        "/stats - Stats\n\n"
-        "💀 Begin..."
+        "🎭 *COMMANDS LIST*\n\n"
+        "*User Commands:*\n"
+        "/start - Start bot\n"
+        "/about - About bot\n"
+        "/statistics - Your full stats\n"
+        "/topxp - Top XP Leaderboard\n"
+        "/toplvl - Alias for topxp\n"
+        "/topcoins - Top Richest Players\n"
+        "/toprep - Top Reputation\n"
+        "/getxp - View your XP/Level\n"
+        "/getlvl - Alias for getxp\n"
+        "/getcoins - View your Money\n"
+        "/getrep - View your Reputation\n\n"
+        "*Admin Commands:*\n"
+        "/log - Get system log\n"
+        "/stats - Global stats\n"
+        "/send_to_user <id> <amount> - Send money\n"
+        "/broadcast - Broadcast message",
+        parse_mode='Markdown'
     )
 
 async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats = get_global_stats()
     await update.message.reply_text(
-        f"📊 STATS\n\n"
-        f"👥 {stats.get('total_players', 0):,}\n"
-        f"🎮 {stats.get('games_played', 0):,}\n"
-        f"💀 {stats.get('total_deaths', 0):,}"
+        f"📊 *GLOBAL STATS*\n\n"
+        f"👥 Total Players: {stats.get('total_players', 0):,}\n"
+        f"🎮 Games Played (Legacy): {stats.get('games_played', 0):,}\n"
+        f"💀 Total Deaths: {stats.get('total_deaths', 0):,}",
+        parse_mode='Markdown'
     )
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1540,8 +1080,6 @@ async def send_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         player = load_player_from_db(target_id)
         if not player:
-             # Try initializing if not exists locally but maybe user exists in Telegram?
-             # We can only credit if they are in our DB.
              await update.message.reply_text("❌ User not found in database.")
              return
 
@@ -1557,427 +1095,6 @@ async def send_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         await update.message.reply_text("❌ Invalid format. Use numbers.")
 
-# ==================== TIC TAC TOE SYSTEM ====================
-tictactoe_games = {}
-
-class TicTacToeGame:
-    def __init__(self, user_id):
-        self.user_id = user_id
-        self.board = [' '] * 9
-        self.turn = 'X'
-        self.winner = None
-        self.game_over = False
-        self.log = "🎮 Tic Tac Toe vs Bot"
-
-    def make_move(self, position):
-        if self.board[position] == ' ':
-            self.board[position] = 'X'
-            if self.check_win('X'):
-                self.winner = 'X'
-                self.game_over = True
-                self.log = "🎉 YOU WIN!"
-            elif ' ' not in self.board:
-                self.game_over = True
-                self.log = "🤝 DRAW!"
-            else:
-                self.turn = 'O'
-                self.bot_move()
-            return True
-        return False
-
-    def bot_move(self):
-        if self.game_over: return
-        available = [i for i, x in enumerate(self.board) if x == ' ']
-        if not available: return
-
-        move = -1
-        # Try to win
-        for m in available:
-            self.board[m] = 'O'
-            if self.check_win('O'):
-                move = m
-                break
-            self.board[m] = ' '
-
-        if move == -1: # Block
-            for m in available:
-                self.board[m] = 'X'
-                if self.check_win('X'):
-                    move = m
-                    self.board[m] = ' '
-                    break
-                self.board[m] = ' '
-
-        if move == -1:
-            move = random.choice(available)
-
-        self.board[move] = 'O'
-        if self.check_win('O'):
-            self.winner = 'O'
-            self.game_over = True
-            self.log = "💀 BOT WINS!"
-        elif ' ' not in self.board:
-            self.game_over = True
-            self.log = "🤝 DRAW!"
-        else:
-            self.turn = 'X'
-
-    def check_win(self, mark):
-        wins = [(0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6)]
-        return any(all(self.board[i] == mark for i in line) for line in wins)
-
-    def render_board(self):
-        key = {'X': '❌', 'O': '⭕', ' ': '⬜'}
-        display = f"{self.log}\n\n"
-        for i in range(0, 9, 3):
-            row = [key[self.board[i+j]] for j in range(3)]
-            display += "".join(row) + "\n"
-        return display
-
-async def send_tictactoe_board(update, user_id):
-    game = tictactoe_games[user_id]
-    keyboard = []
-    if not game.game_over:
-        for i in range(0, 9, 3):
-            row = []
-            for j in range(3):
-                idx = i+j
-                text = " " if game.board[idx] == ' ' else game.board[idx]
-                row.append(InlineKeyboardButton(text, callback_data=f'ttt_move_{idx}'))
-            keyboard.append(row)
-    else:
-        keyboard.append([InlineKeyboardButton("🔄 Play Again", callback_data='ttt_new')])
-
-    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data='games_arcade')])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    if update.callback_query:
-        await update.callback_query.edit_message_text(game.render_board(), reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(game.render_board(), reply_markup=reply_markup)
-
-@user_operation
-async def tictactoe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    data = query.data
-
-    if data == 'ttt_new':
-        tictactoe_games[user_id] = TicTacToeGame(user_id)
-        await send_tictactoe_board(update, user_id)
-        return
-
-    if user_id not in tictactoe_games:
-        tictactoe_games[user_id] = TicTacToeGame(user_id)
-
-    game = tictactoe_games[user_id]
-
-    if data.startswith('ttt_move_'):
-        idx = int(data.split('_')[2])
-        if not game.game_over and game.board[idx] == ' ':
-            game.make_move(idx)
-            if game.winner == 'X':
-                p = load_player_from_db(user_id)
-                if p:
-                    p['money'] += 50000000
-                    save_player(user_id, p)
-                    game.log += "\n💰 +₩50,000,000"
-            await send_tictactoe_board(update, user_id)
-            if game.game_over:
-                del tictactoe_games[user_id]
-        else:
-            await query.answer("❌ Invalid move!", show_alert=True)
-    else:
-        await send_tictactoe_board(update, user_id)
-
-async def tictactoe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    tictactoe_games[user_id] = TicTacToeGame(user_id)
-    await send_tictactoe_board(update, user_id)
-
-
-# ==================== ROCK PAPER SCISSORS SYSTEM ====================
-async def rps_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("👊 ROCK", callback_data='rps_rock'),
-         InlineKeyboardButton("✋ PAPER", callback_data='rps_paper'),
-         InlineKeyboardButton("✌️ SCISSORS", callback_data='rps_scissors')],
-        [InlineKeyboardButton("🔙 Back", callback_data='games_arcade')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    msg = "🎮 ROCK PAPER SCISSORS\n\nChoose your weapon!"
-    if update.callback_query:
-        await update.callback_query.edit_message_text(msg, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(msg, reply_markup=reply_markup)
-
-@user_operation
-async def rps_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    choice = query.data.split('_')[1]
-
-    # Animation
-    await query.edit_message_text("👊 ROCK...", reply_markup=None)
-    await asyncio.sleep(0.8)
-    await query.edit_message_text("✋ PAPER...", reply_markup=None)
-    await asyncio.sleep(0.8)
-    await query.edit_message_text("✌️ SCISSORS...", reply_markup=None)
-    await asyncio.sleep(0.8)
-    await query.edit_message_text("🔫 SHOOT!", reply_markup=None)
-    await asyncio.sleep(0.5)
-
-    bot_choice = random.choice(['rock', 'paper', 'scissors'])
-    emoji = {'rock': '👊', 'paper': '✋', 'scissors': '✌️'}
-
-    result = "🤝 DRAW!"
-    win = False
-
-    if choice == bot_choice:
-        result = "🤝 DRAW!"
-    elif (choice == 'rock' and bot_choice == 'scissors') or \
-         (choice == 'paper' and bot_choice == 'rock') or \
-         (choice == 'scissors' and bot_choice == 'paper'):
-        result = "🎉 YOU WIN!"
-        win = True
-    else:
-        result = "💀 YOU LOSE!"
-
-    msg = f"🎮 RESULTS\n\nYou: {emoji[choice]}\nBot: {emoji[bot_choice]}\n\n{result}"
-
-    if win:
-        p = load_player_from_db(user_id)
-        if p:
-            p['money'] += 30000000
-            save_player(user_id, p)
-            msg += "\n💰 +₩30,000,000"
-
-    keyboard = [
-        [InlineKeyboardButton("🔄 Again", callback_data='game_rps')],
-        [InlineKeyboardButton("🔙 Back", callback_data='games_arcade')]
-    ]
-    await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-# ==================== BLACKJACK SYSTEM ====================
-blackjack_games = {}
-
-class BlackjackGame:
-    def __init__(self, user_id):
-        self.user_id = user_id
-        self.deck = []
-        self.player_hand = []
-        self.dealer_hand = []
-        self.game_over = False
-        self.status = "Playing"
-        self.create_deck()
-        self.deal_initial()
-
-    def create_deck(self):
-        suits = ['♠️', '♥️', '♦️', '♣️']
-        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
-        self.deck = [{'rank': r, 'suit': s, 'value': self.get_value(r)} for s in suits for r in ranks]
-        random.shuffle(self.deck)
-
-    def get_value(self, rank):
-        if rank in ['J', 'Q', 'K']: return 10
-        if rank == 'A': return 11
-        return int(rank)
-
-    def deal_initial(self):
-        self.player_hand = [self.deck.pop(), self.deck.pop()]
-        self.dealer_hand = [self.deck.pop(), self.deck.pop()]
-
-    def calculate_score(self, hand):
-        score = sum(card['value'] for card in hand)
-        aces = sum(1 for card in hand if card['rank'] == 'A')
-        while score > 21 and aces:
-            score -= 10
-            aces -= 1
-        return score
-
-    def hit(self):
-        self.player_hand.append(self.deck.pop())
-        if self.calculate_score(self.player_hand) > 21:
-            self.game_over = True
-            self.status = "BUST"
-
-    def stand(self):
-        self.game_over = True
-        while self.calculate_score(self.dealer_hand) < 17:
-            self.dealer_hand.append(self.deck.pop())
-
-        p_score = self.calculate_score(self.player_hand)
-        d_score = self.calculate_score(self.dealer_hand)
-
-        if d_score > 21:
-            self.status = "WIN"
-        elif p_score > d_score:
-            self.status = "WIN"
-        elif p_score < d_score:
-            self.status = "LOSE"
-        else:
-            self.status = "PUSH"
-
-    def render(self, reveal=False):
-        p_score = self.calculate_score(self.player_hand)
-
-        cards_str = " ".join([f"{c['rank']}{c['suit']}" for c in self.player_hand])
-        txt = f"🃏 BLACKJACK\n\n👤 YOU ({p_score})\n{cards_str}\n\n"
-
-        if reveal or self.game_over:
-            d_score = self.calculate_score(self.dealer_hand)
-            d_cards = " ".join([f"{c['rank']}{c['suit']}" for c in self.dealer_hand])
-            txt += f"🕴️ DEALER ({d_score})\n{d_cards}\n\n"
-        else:
-            c = self.dealer_hand[0]
-            txt += f"🕴️ DEALER (?)\n{c['rank']}{c['suit']} 🂠\n\n"
-
-        if self.game_over:
-            if self.status == "WIN": txt += "🎉 YOU WIN! +₩100M"
-            elif self.status == "LOSE": txt += "💀 YOU LOSE!"
-            elif self.status == "BUST": txt += "💥 BUST!"
-            elif self.status == "PUSH": txt += "🤝 PUSH (Money returned)"
-
-        return txt
-
-async def blackjack_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    p = load_player_from_db(user_id)
-    if not p or p['money'] < 50000000:
-        if update.callback_query:
-            await update.callback_query.answer("❌ Need ₩50M!", show_alert=True)
-        else:
-            await update.message.reply_text("❌ Need ₩50M to play!")
-        return
-
-    p['money'] -= 50000000
-    save_player(user_id, p)
-
-    game = BlackjackGame(user_id)
-    blackjack_games[user_id] = game
-
-    keyboard = [
-        [InlineKeyboardButton("👊 HIT", callback_data='bj_hit'),
-         InlineKeyboardButton("✋ STAND", callback_data='bj_stand')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    if update.callback_query:
-        await update.callback_query.edit_message_text(game.render(), reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(game.render(), reply_markup=reply_markup)
-
-@user_operation
-async def blackjack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    data = query.data
-
-    if user_id not in blackjack_games:
-        await query.answer("❌ Game expired.", show_alert=True)
-        return
-
-    game = blackjack_games[user_id]
-
-    if data == 'bj_hit':
-        game.hit()
-        if game.game_over:
-            del blackjack_games[user_id]
-            keyboard = [[InlineKeyboardButton("🔄 Again", callback_data='casino_blackjack'),
-                         InlineKeyboardButton("🔙 Back", callback_data='casino')]]
-            await query.edit_message_text(game.render(reveal=True), reply_markup=InlineKeyboardMarkup(keyboard))
-        else:
-            keyboard = [
-                [InlineKeyboardButton("👊 HIT", callback_data='bj_hit'),
-                 InlineKeyboardButton("✋ STAND", callback_data='bj_stand')]
-            ]
-            await query.edit_message_text(game.render(), reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif data == 'bj_stand':
-        game.stand()
-        p = load_player_from_db(user_id)
-        if game.status == "WIN":
-            p['money'] += 100000000
-        elif game.status == "PUSH":
-            p['money'] += 50000000
-        save_player(user_id, p)
-
-        del blackjack_games[user_id]
-        keyboard = [[InlineKeyboardButton("🔄 Again", callback_data='casino_blackjack'),
-                     InlineKeyboardButton("🔙 Back", callback_data='casino')]]
-        await query.edit_message_text(game.render(reveal=True), reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-# ==================== ROULETTE SYSTEM ====================
-async def roulette_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🔴 RED (2x)", callback_data='roulette_red'),
-         InlineKeyboardButton("⚫ BLACK (2x)", callback_data='roulette_black')],
-        [InlineKeyboardButton("1-12 (3x)", callback_data='roulette_1-12'),
-         InlineKeyboardButton("13-24 (3x)", callback_data='roulette_13-24'),
-         InlineKeyboardButton("25-36 (3x)", callback_data='roulette_25-36')],
-        [InlineKeyboardButton("🟢 GREEN (35x)", callback_data='roulette_green')],
-        [InlineKeyboardButton("🔙 Back", callback_data='casino')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    msg = "🎡 ROULETTE\n\nBet: ₩50M\nChoose your bet:"
-    if update.callback_query:
-        await update.callback_query.edit_message_text(msg, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(msg, reply_markup=reply_markup)
-
-@user_operation
-async def roulette_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    bet_type = query.data.split('_')[1]
-
-    p = load_player_from_db(user_id)
-    if not p or p['money'] < 50000000:
-        await query.answer("❌ Need ₩50M!", show_alert=True)
-        return
-
-    p['money'] -= 50000000
-    save_player(user_id, p)
-
-    # Animation
-    await query.edit_message_text("🎡 Spinning... 🔴", reply_markup=None)
-    await asyncio.sleep(0.5)
-    await query.edit_message_text("🎡 Spinning... ⚫", reply_markup=None)
-    await asyncio.sleep(0.5)
-    await query.edit_message_text("🎡 Spinning... 🟢", reply_markup=None)
-    await asyncio.sleep(0.5)
-    await query.edit_message_text("🎡 Ball bouncing...", reply_markup=None)
-    await asyncio.sleep(0.5)
-
-    result_num = random.randint(0, 36)
-    color = "green" if result_num == 0 else ("red" if result_num in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36] else "black")
-    emoji = {'red': '🔴', 'black': '⚫', 'green': '🟢'}
-
-    win = False
-    multiplier = 0
-
-    if bet_type == 'red' and color == 'red': win = True; multiplier = 2
-    elif bet_type == 'black' and color == 'black': win = True; multiplier = 2
-    elif bet_type == 'green' and color == 'green': win = True; multiplier = 35
-    elif bet_type == '1-12' and 1 <= result_num <= 12: win = True; multiplier = 3
-    elif bet_type == '13-24' and 13 <= result_num <= 24: win = True; multiplier = 3
-    elif bet_type == '25-36' and 25 <= result_num <= 36: win = True; multiplier = 3
-
-    msg = f"🎡 RESULT: {emoji[color]} {result_num}\n\n"
-    if win:
-        p['money'] += 50000000 * multiplier
-        save_player(user_id, p)
-        msg += f"🎉 YOU WIN! +₩{50000000 * multiplier:,}"
-    else:
-        msg += "💀 YOU LOSE!"
-
-    msg += f"\n💰 ₩{p['money']:,}"
-
-    keyboard = [[InlineKeyboardButton("🔄 Again", callback_data='casino_roulette'),
-                 InlineKeyboardButton("🔙 Back", callback_data='casino')]]
-    await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
 def main():
     """Start bot with web server"""
     application = Application.builder().token(BOT_TOKEN).build()
@@ -1986,26 +1103,31 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(CommandHandler("stats", stats_cmd))
+    application.add_handler(CommandHandler("log", log_cmd))
+    application.add_handler(CommandHandler("about", about_cmd))
+    application.add_handler(CommandHandler("statistics", statistics_cmd))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("send_to_user", send_to_user))
 
-    # New Game Handlers
-    application.add_handler(CallbackQueryHandler(tictactoe_callback, pattern='^ttt_'))
-    application.add_handler(CallbackQueryHandler(rps_callback, pattern='^rps_'))
-    application.add_handler(CallbackQueryHandler(blackjack_callback, pattern='^bj_'))
-    application.add_handler(CallbackQueryHandler(roulette_callback, pattern='^roulette_'))
+    # New Commands
+    application.add_handler(CommandHandler("topxp", topxp_cmd))
+    application.add_handler(CommandHandler("toplvl", topxp_cmd))
+    application.add_handler(CommandHandler("topcoins", topcoins_cmd))
+    application.add_handler(CommandHandler("toprep", toprep_cmd))
+    application.add_handler(CommandHandler("getxp", getxp_cmd))
+    application.add_handler(CommandHandler("getlvl", getxp_cmd))
+    application.add_handler(CommandHandler("getcoins", getcoins_cmd))
+    application.add_handler(CommandHandler("getrep", getrep_cmd))
 
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("=" * 60)
-    print("🎭 SQUID GAME BOT - PRODUCTION")
+    print("🎭 SQUID GAME BOT - LITE EDITION")
     print("=" * 60)
     print(f"✅ MongoDB: {'Connected' if mongodb_available else 'Offline'}")
     print(f"✅ Databases: {len(db_connections)}")
     print(f"✅ Web Server: http://0.0.0.0:{WEB_SERVER_PORT}")
-    print("✅ Multi-user: Protected")
-    print("✅ Button spam: Blocked")
     print("=" * 60)
     print("🎮 Bot starting...")
     print("=" * 60)
