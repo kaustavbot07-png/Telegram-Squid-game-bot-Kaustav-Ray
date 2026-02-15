@@ -472,7 +472,7 @@ async def changename_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     forbidden_names = ["iamkkronly", "Kaustav", "Ray", "filestore4u"]
-    if new_name.lower() in [name.lower() for name in forbidden_names]:
+    if any(forbidden.lower() in new_name.lower() for forbidden in forbidden_names):
         await update.message.reply_text("❌ This name is not allowed.")
         return
 
