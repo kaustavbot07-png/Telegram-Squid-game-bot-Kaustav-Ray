@@ -12,6 +12,7 @@ from functools import wraps
 import time
 from aiohttp import web
 import os
+import re
 
 # Enable logging
 logging.basicConfig(
@@ -550,6 +551,23 @@ async def changename_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if any(forbidden.lower() in new_name.lower() for forbidden in forbidden_names):
         await update.message.reply_text("❌ This name is not allowed.")
         return
+
+    # Check if name is already taken by another user
+    # Escape special characters for regex
+    escaped_name = re.escape(new_name)
+    name_regex = f"^{escaped_name}$"
+
+    for db in db_connections:
+        try:
+            existing = db[COLLECTION_PLAYERS].find_one(
+                {"name": {"$regex": name_regex, "$options": "i"}}
+            )
+            if existing and existing['user_id'] != user.id:
+                 await update.message.reply_text("❌ This name is already taken by another player.")
+                 return
+        except Exception as e:
+            logger.error(f"Error checking name uniqueness: {e}")
+            continue
 
     # Update in DB
     player_data = await init_player(user, context)
