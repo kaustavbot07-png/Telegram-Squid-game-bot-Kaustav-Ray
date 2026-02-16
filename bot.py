@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 # Bot Token
 BOT_TOKEN = "5966719769:AAEilFOlMwwEUOUFXBmmgQL11NpKMliuXbs"
 ADMIN_ID = 5915172170
-TARGET_GROUP_ID = -1001234567890  # Replace with actual group ID
 LOG_CHANNEL_ID = -1003774210935
 
 # Web Server Configuration
