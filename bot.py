@@ -90,12 +90,13 @@ web_server = WebServer()
 
 # ==================== MONGODB CONFIGURATION ====================
 db_connections = []
-active_db = None
 db_lock = threading.Lock()
 
 def init_mongodb():
-    """Initialize MongoDB connections with fallback"""
-    global db_connections, active_db
+    """Initialize all MongoDB connections"""
+    global db_connections
+
+    db_connections = []
     
     for uri in MONGODB_URIS:
         try:
@@ -111,54 +112,30 @@ def init_mongodb():
             )
             client.admin.command('ping')
             db = client[DB_NAME]
-            db_connections.append(db)
-            logger.info(f"✅ MongoDB connected: {uri[:30]}...")
             
-            if active_db is None:
-                active_db = db
-                logger.info(f"✅ Active database set")
+            # Create indexes for each DB
+            try:
+                db[COLLECTION_PLAYERS].create_index("user_id", unique=True)
+                db[COLLECTION_PLAYERS].create_index("xp")
+                db[COLLECTION_PLAYERS].create_index("level")
+            except Exception as e:
+                logger.error(f"❌ Error creating indexes for {uri[:30]}...: {e}")
+
+            db_connections.append(db)
+            safe_uri = uri.split('@')[-1] if '@' in uri else uri[:10] + '...'
+            logger.info(f"✅ MongoDB connected: ...@{safe_uri}")
                 
         except (ConnectionFailure, ConfigurationError, Exception) as e:
-            logger.warning(f"❌ MongoDB failed ({type(e).__name__}): {uri[:30]}... Error: {e}")
+            safe_uri = uri.split('@')[-1] if '@' in uri else uri[:10] + '...'
+            logger.warning(f"❌ MongoDB failed ({type(e).__name__}): ...@{safe_uri} Error: {e}")
             continue
     
     if not db_connections:
         logger.error("❌ No MongoDB connections! Using in-memory storage.")
         return False
-    
-    try:
-        active_db[COLLECTION_PLAYERS].create_index("user_id", unique=True)
-        active_db[COLLECTION_PLAYERS].create_index("xp")
-        active_db[COLLECTION_PLAYERS].create_index("level")
-        logger.info("✅ Database indexes created")
-    except Exception as e:
-        logger.error(f"❌ Error creating indexes: {e}")
-    
+        
+    logger.info(f"✅ Total {len(db_connections)} databases connected")
     return True
-
-def get_active_db():
-    """Get active database with automatic failover"""
-    global active_db, db_connections
-    
-    with db_lock:
-        if active_db is not None:
-            try:
-                active_db.command('ping')
-                return active_db
-            except Exception:
-                logger.warning("⚠️ Active DB lost, switching...")
-        
-        for db in db_connections:
-            try:
-                db.command('ping')
-                active_db = db
-                logger.info("✅ Switched to backup database")
-                return active_db
-            except Exception:
-                continue
-        
-        logger.error("❌ All databases failed!")
-        return None
 
 mongodb_available = init_mongodb()
 
@@ -198,82 +175,164 @@ def user_operation(func):
 
 # ==================== DATABASE OPERATIONS ====================
 def save_player_to_db(user_id, player_data):
-    """Save player data to MongoDB"""
-    if not mongodb_available:
+    """Save player data to MongoDB with failover/spillover"""
+    if not db_connections:
         return
     
-    try:
-        db = get_active_db()
-        if db is None:
-            return
-        
-        player_data_copy = player_data.copy()
-        player_data_copy['user_id'] = user_id
-        player_data_copy['last_updated'] = datetime.utcnow()
-        
-        db[COLLECTION_PLAYERS].update_one(
-            {'user_id': user_id},
-            {'$set': player_data_copy},
-            upsert=True
-        )
-        
+    player_data_copy = player_data.copy()
+    player_data_copy['user_id'] = user_id
+    player_data_copy['last_updated'] = datetime.utcnow()
+
+    # Check cache for known location
+    target_db_idx = -1
+    with cache_lock:
+        if user_id in player_cache and 'db_index' in player_cache[user_id]:
+             target_db_idx = player_cache[user_id]['db_index']
+
+    # If not in cache, find where the user is
+    if target_db_idx == -1:
+         for idx, db in enumerate(db_connections):
+             try:
+                 if db[COLLECTION_PLAYERS].find_one({'user_id': user_id}, {'_id': 1}):
+                     target_db_idx = idx
+                     break
+             except:
+                 continue
+
+    # Helper to update cache
+    def update_cache(idx):
         with cache_lock:
             player_cache[user_id] = {
                 'data': player_data_copy,
-                'timestamp': time.time()
+                'timestamp': time.time(),
+                'db_index': idx
             }
+
+    # Case 1: Existing User
+    if target_db_idx != -1:
+        try:
+            db_connections[target_db_idx][COLLECTION_PLAYERS].update_one(
+                {'user_id': user_id},
+                {'$set': player_data_copy}
+            )
+            update_cache(target_db_idx)
+            return
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to update user {user_id} in DB {target_db_idx}: {e}. Attempting migration...")
+
+            # Migration Logic: Try to move to another DB
+            migrated = False
+            for idx, db in enumerate(db_connections):
+                if idx == target_db_idx: continue
+                try:
+                    # Insert into new DB
+                    db[COLLECTION_PLAYERS].update_one(
+                        {'user_id': user_id},
+                        {'$set': player_data_copy},
+                        upsert=True
+                    )
+                    # Try to delete from old DB (best effort)
+                    try:
+                        db_connections[target_db_idx][COLLECTION_PLAYERS].delete_one({'user_id': user_id})
+                    except:
+                        pass
+
+                    logger.info(f"✅ Migrated user {user_id} from DB {target_db_idx} to DB {idx}")
+                    update_cache(idx)
+                    migrated = True
+                    break
+                except Exception as migration_error:
+                    logger.error(f"❌ Migration failed to DB {idx}: {migration_error}")
+                    continue
+
+            if not migrated:
+                logger.error(f"❌ Could not save/migrate user {user_id}!")
+
+    # Case 2: New User
+    else:
+        saved = False
+        for idx, db in enumerate(db_connections):
+            try:
+                db[COLLECTION_PLAYERS].update_one(
+                    {'user_id': user_id},
+                    {'$set': player_data_copy},
+                    upsert=True
+                )
+                update_cache(idx)
+                saved = True
+                break
+            except Exception as e:
+                 logger.warning(f"⚠️ Failed to save new user {user_id} to DB {idx}: {e}. Trying next...")
+                 continue
         
-    except Exception as e:
-        logger.error(f"Error saving player {user_id}: {e}")
+        if not saved:
+            logger.error(f"❌ Failed to save new user {user_id} to any database!")
 
 def load_player_from_db(user_id):
-    """Load player data from MongoDB with caching"""
+    """Load player data from any connected MongoDB with caching (Last Write Wins)"""
     with cache_lock:
         if user_id in player_cache:
             cached = player_cache[user_id]
             if time.time() - cached['timestamp'] < CACHE_TIMEOUT:
                 return cached['data']
     
-    if not mongodb_available:
+    if not db_connections:
         return None
     
-    try:
-        db = get_active_db()
-        if db is None:
-            return None
-        
-        player_data = db[COLLECTION_PLAYERS].find_one({'user_id': user_id})
-        
-        if player_data:
-            with cache_lock:
-                player_cache[user_id] = {
-                    'data': player_data,
-                    'timestamp': time.time()
-                }
-            return player_data
-        
+    candidates = []
+
+    for idx, db in enumerate(db_connections):
+        try:
+            player_data = db[COLLECTION_PLAYERS].find_one({'user_id': user_id})
+            if player_data:
+                candidates.append((idx, player_data))
+        except Exception as e:
+            logger.error(f"Error loading player {user_id} from DB {idx}: {e}")
+            continue
+
+    if not candidates:
         return None
         
-    except Exception as e:
-        logger.error(f"Error loading player {user_id}: {e}")
-        return None
+    # Find best candidate (latest last_updated)
+    best_idx, best_data = candidates[0]
+
+    if len(candidates) > 1:
+        # Sort by last_updated descending
+        def get_sort_key(item):
+            val = item[1].get('last_updated')
+            return val if isinstance(val, datetime) else datetime.min
+
+        candidates.sort(key=get_sort_key, reverse=True)
+        best_idx, best_data = candidates[0]
+
+    with cache_lock:
+        player_cache[user_id] = {
+            'data': best_data,
+            'timestamp': time.time(),
+            'db_index': best_idx
+        }
+    return best_data
 
 def get_leaderboard(limit=10):
-    """Get leaderboard from database"""
-    if not mongodb_available:
+    """Get leaderboard from all databases"""
+    if not db_connections:
         return []
     
-    try:
-        db = get_active_db()
-        if db is None:
-            return []
-        
-        players = db[COLLECTION_PLAYERS].find().sort([("level", -1), ("xp", -1)]).limit(limit)
-        return list(players)
-        
-    except Exception as e:
-        logger.error(f"Error getting leaderboard: {e}")
-        return []
+    all_players = []
+
+    for idx, db in enumerate(db_connections):
+        try:
+            # Fetch top 'limit' from EACH db to ensure we get global top 'limit'
+            players = list(db[COLLECTION_PLAYERS].find().sort([("level", -1), ("xp", -1)]).limit(limit))
+            all_players.extend(players)
+        except Exception as e:
+            logger.error(f"Error getting leaderboard from DB {idx}: {e}")
+            continue
+
+    # Sort merged list by level DESC, then xp DESC
+    all_players.sort(key=lambda x: (x.get('level', 1), x.get('xp', 0)), reverse=True)
+
+    return all_players[:limit]
 
 async def init_player(user, context):
     """Initialize new player or get existing"""
