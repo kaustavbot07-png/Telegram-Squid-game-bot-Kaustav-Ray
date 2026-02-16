@@ -24,7 +24,6 @@ Open `bot.py` and configure the following variables at the top of the file:
 
 *   `BOT_TOKEN`: Your Telegram Bot API Token.
 *   `ADMIN_ID`: The Telegram ID of the bot administrator.
-*   `TARGET_GROUP_ID`: The ID of the group where the bot is active.
 *   `LOG_CHANNEL_ID`: The ID of the channel where logs (new users, level ups) are sent.
 *   `MONGODB_URIS`: A list of MongoDB connection strings. The bot will connect to all of them.
 
