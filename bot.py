@@ -45,6 +45,9 @@ DB_NAME = "bot_db"
 COLLECTION_PLAYERS = "players"
 COLLECTION_GLOBAL_STATS = "global_stats"
 
+# Daily XP Limit
+MAX_XP_PER_DAY = 2000
+
 # ==================== WEB SERVER FOR UPTIME MONITORING ====================
 class WebServer:
     def __init__(self):
@@ -364,6 +367,8 @@ async def init_player(user, context):
             'name': first_name,
             'xp': 0,
             'level': 1,
+            'daily_xp': 0,
+            'last_xp_date': datetime.utcnow().date().isoformat(),
             'created_at': datetime.utcnow()
         }
         save_player_to_db(user_id, player_data)
@@ -392,11 +397,19 @@ async def init_player(user, context):
         if 'xp' not in player_data:
             player_data['xp'] = 0
             player_data['level'] = 1
+            player_data['daily_xp'] = 0
+            player_data['last_xp_date'] = datetime.utcnow().date().isoformat()
             if 'name' not in player_data:
                 player_data['name'] = first_name
             save_player_to_db(user_id, player_data)
         elif 'name' not in player_data: # update name if missing
             player_data['name'] = first_name
+            save_player_to_db(user_id, player_data)
+
+        # Initialize daily stats if missing
+        if 'daily_xp' not in player_data:
+            player_data['daily_xp'] = 0
+            player_data['last_xp_date'] = datetime.utcnow().date().isoformat()
             save_player_to_db(user_id, player_data)
 
     return player_data
@@ -415,7 +428,41 @@ async def add_xp(user, amount, context):
 
     player_data = await init_player(user, context)
 
+    # Check daily limit
+    today = datetime.utcnow().date().isoformat()
+    if player_data.get('last_xp_date') != today:
+        player_data['daily_xp'] = 0
+        player_data['last_xp_date'] = today
+
+    if player_data['daily_xp'] >= MAX_XP_PER_DAY:
+        # Only notify once per day/session to avoid spam, or just return silently
+        # We can implement a simple check if we haven't warned them today
+        # For now, silently return to avoid spamming the chat
+        return
+
+    # Check if adding this amount would exceed limit
+    if player_data['daily_xp'] + amount > MAX_XP_PER_DAY:
+        amount = MAX_XP_PER_DAY - player_data['daily_xp']
+        # If amount is 0 or negative, they are capped
+        if amount <= 0:
+             # Send warning if not sent recently (omitted for simplicity/to prevent spam)
+             # await context.bot.send_message(chat_id=user_id, text="You’ve reached today’s XP limit 🛑 Come back later!")
+             return
+
+    # Add XP
     player_data['xp'] += amount
+    player_data['daily_xp'] += amount
+
+    # Check if they just hit the cap with this message
+    if player_data['daily_xp'] >= MAX_XP_PER_DAY:
+         try:
+             await context.bot.send_message(
+                 chat_id=user_id,
+                 text="You’ve reached today’s XP limit 🛑 Come back later!"
+             )
+         except:
+             pass
+
     current_level = player_data['level']
     xp_needed = calculate_xp_required(current_level)
 
@@ -508,13 +555,17 @@ async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     header = "🏆 **LEADERBOARD (TOP 200)**\n\n"
     msg_chunk = ""
 
+    medals = {1: "🥇", 2: "🥈", 3: "🥉", 4: "👑", 5: "👑"}
+
     for i, p in enumerate(players, 1):
         name = p.get('name', 'Unknown')
         # Escape markdown characters in name to prevent errors
         name = name.replace("*", "").replace("_", "").replace("`", "")
         lvl = p.get('level', 1)
         xp = p.get('xp', 0)
-        line = f"{i}. **{name}** - Lvl {lvl} ({xp} XP)\n"
+
+        prefix = medals.get(i, f"{i}.")
+        line = f"{prefix} **{name}** - Lvl {lvl} ({xp} XP)\n"
 
         if len(header + msg_chunk + line) > 4000:
             await update.message.reply_text(header + msg_chunk, parse_mode='Markdown')
@@ -544,6 +595,11 @@ async def changename_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(new_name) < 2:
         await update.message.reply_text("❌ Name is too short (min 2 chars).")
+        return
+
+    # Check for only alphabetic characters
+    if not new_name.replace(" ", "").isalpha():
+        await update.message.reply_text("❌ Name must only contain letters (A-Z).")
         return
 
     forbidden_names = ["iamkkronly", "Kaustav", "Ray", "filestore4u"]
