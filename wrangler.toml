@@ -1,0 +1,9 @@
+name = "my-bot-pinger"
+main = "worker.js"
+compatibility_date = "2023-10-30"
+
+[triggers]
+crons = ["*/10 * * * *"] # Every 10 minutes
+
+[vars]
+BOT_URL = "https://your-bot-url.onrender.com" # Replace with your bot's URL
