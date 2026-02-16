@@ -555,7 +555,7 @@ async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     header = "🏆 **LEADERBOARD (TOP 200)**\n\n"
     msg_chunk = ""
 
-    medals = {1: "🥇", 2: "🥈", 3: "🥉", 4: "👑", 5: "👑"}
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
 
     for i, p in enumerate(players, 1):
         name = p.get('name', 'Unknown')
