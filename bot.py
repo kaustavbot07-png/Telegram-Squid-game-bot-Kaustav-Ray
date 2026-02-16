@@ -12,6 +12,7 @@ from functools import wraps
 import time
 from aiohttp import web
 import os
+import re
 
 # Enable logging
 logging.basicConfig(
@@ -329,10 +330,26 @@ def get_leaderboard(limit=10):
             logger.error(f"Error getting leaderboard from DB {idx}: {e}")
             continue
 
-    # Sort merged list by level DESC, then xp DESC
-    all_players.sort(key=lambda x: (x.get('level', 1), x.get('xp', 0)), reverse=True)
+    # Deduplicate players (keep highest level/xp)
+    unique_players = {}
+    for p in all_players:
+        uid = p.get('user_id')
+        if not uid: continue
 
-    return all_players[:limit]
+        if uid not in unique_players:
+            unique_players[uid] = p
+        else:
+            # Compare and keep better stats
+            current = unique_players[uid]
+            if (p.get('level', 1) > current.get('level', 1)) or \
+               (p.get('level', 1) == current.get('level', 1) and p.get('xp', 0) > current.get('xp', 0)):
+                unique_players[uid] = p
+
+    # Sort merged list by level DESC, then xp DESC
+    final_list = list(unique_players.values())
+    final_list.sort(key=lambda x: (x.get('level', 1), x.get('xp', 0)), reverse=True)
+
+    return final_list[:limit]
 
 async def init_player(user, context):
     """Initialize new player or get existing"""
@@ -534,6 +551,23 @@ async def changename_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if any(forbidden.lower() in new_name.lower() for forbidden in forbidden_names):
         await update.message.reply_text("❌ This name is not allowed.")
         return
+
+    # Check if name is already taken by another user
+    # Escape special characters for regex
+    escaped_name = re.escape(new_name)
+    name_regex = f"^{escaped_name}$"
+
+    for db in db_connections:
+        try:
+            existing = db[COLLECTION_PLAYERS].find_one(
+                {"name": {"$regex": name_regex, "$options": "i"}}
+            )
+            if existing and existing['user_id'] != user.id:
+                 await update.message.reply_text("❌ This name is already taken by another player.")
+                 return
+        except Exception as e:
+            logger.error(f"Error checking name uniqueness: {e}")
+            continue
 
     # Update in DB
     player_data = await init_player(user, context)
