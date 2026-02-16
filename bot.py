@@ -506,7 +506,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== MAIN ====================
 def main():
     """Start bot"""
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
     
     # Handlers
     application.add_handler(CommandHandler("start", start))
