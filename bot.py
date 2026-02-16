@@ -329,10 +329,26 @@ def get_leaderboard(limit=10):
             logger.error(f"Error getting leaderboard from DB {idx}: {e}")
             continue
 
-    # Sort merged list by level DESC, then xp DESC
-    all_players.sort(key=lambda x: (x.get('level', 1), x.get('xp', 0)), reverse=True)
+    # Deduplicate players (keep highest level/xp)
+    unique_players = {}
+    for p in all_players:
+        uid = p.get('user_id')
+        if not uid: continue
 
-    return all_players[:limit]
+        if uid not in unique_players:
+            unique_players[uid] = p
+        else:
+            # Compare and keep better stats
+            current = unique_players[uid]
+            if (p.get('level', 1) > current.get('level', 1)) or \
+               (p.get('level', 1) == current.get('level', 1) and p.get('xp', 0) > current.get('xp', 0)):
+                unique_players[uid] = p
+
+    # Sort merged list by level DESC, then xp DESC
+    final_list = list(unique_players.values())
+    final_list.sort(key=lambda x: (x.get('level', 1), x.get('xp', 0)), reverse=True)
+
+    return final_list[:limit]
 
 async def init_player(user, context):
     """Initialize new player or get existing"""

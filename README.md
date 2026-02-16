@@ -1,37 +1,46 @@
-# Telegram XP & Level Bot
+# XP & Leveling Telegram Bot
 
-A simple yet engaging Telegram bot that gamifies group interactions. It tracks user activity in groups and awards XP (Experience Points) for every message sent. As users gain XP, they level up, with each level becoming progressively harder to reach.
+A Python Telegram Bot that tracks user activity, awards XP for messages, and maintains a global leaderboard.
 
-## 🚀 Features
+## Features
 
-*   **Activity Tracking:** Monitors group messages and awards XP based on message length.
-*   **Leveling System:** Users level up as they accumulate XP.
-    *   **Scaling Difficulty:** The XP required for the next level increases quadratically, making high levels a true achievement.
-    *   **Unlimited Levels:** There is no cap on the maximum level a user can reach.
-*   **Leaderboard:** Displays the Top 200 active users sorted by Level and XP.
-*   **Persistence:** Uses MongoDB to store user progress securely.
-*   **Web Server:** Includes a built-in web server for uptime monitoring (compatible with Render, Railway, etc.).
+*   **XP System:** Users earn XP for every message sent in the group.
+*   **Leveling:** Unlimited levels with increasing difficulty.
+*   **Leaderboard:** `/top` command displays the top 200 players globally.
+*   **Multi-Database Support:** Configure multiple MongoDB URIs. The bot automatically spills over to the next database if one becomes full or unreachable.
+*   **Data Integrity:** Reads are performed across all connected databases, resolving conflicts using the "Last Write Wins" strategy.
+*   **Web Server:** Includes a built-in web server for uptime monitoring (compatible with services like UptimeRobot).
 
-## 🛠️ Commands
+## Commands
 
-*   `/start` - Initialize your profile and see basic info.
-*   `/level` - Check your current Level, XP, and progress to the next level.
-*   `/top` - View the Top 200 Leaderboard.
+*   `/start` - Register with the bot and start tracking.
+*   `/level` - Check your current Level, XP, and progress bar.
+*   `/top` - View the global leaderboard (Top 200).
+*   `/changename <new_name>` - Change your display name on the leaderboard.
 
-## ⚙️ Installation & Setup
+## Configuration
 
-### Prerequisites
+Open `bot.py` and configure the following variables at the top of the file:
 
-*   Python 3.9+
-*   MongoDB Database (e.g., MongoDB Atlas)
-*   Telegram Bot Token (from @BotFather)
+*   `BOT_TOKEN`: Your Telegram Bot API Token.
+*   `ADMIN_ID`: The Telegram ID of the bot administrator.
+*   `TARGET_GROUP_ID`: The ID of the group where the bot is active.
+*   `LOG_CHANNEL_ID`: The ID of the channel where logs (new users, level ups) are sent.
+*   `MONGODB_URIS`: A list of MongoDB connection strings. The bot will connect to all of them.
 
-### Local Setup
+```python
+MONGODB_URIS = [
+    "mongodb+srv://user:pass@cluster0.mongodb.net/...",
+    "mongodb+srv://user:pass@cluster1.mongodb.net/...",
+]
+```
+
+## Installation & Usage
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
-    cd <repository-directory>
+    git clone <repository_url>
+    cd <repository_name>
     ```
 
 2.  **Install dependencies:**
@@ -39,36 +48,21 @@ A simple yet engaging Telegram bot that gamifies group interactions. It tracks u
     pip install -r requirements.txt
     ```
 
-3.  **Configure the Bot:**
-    *   Open `bot.py` and update the `BOT_TOKEN` and `MONGODB_URIS` variables.
-
-4.  **Run the Bot:**
+3.  **Run the bot:**
     ```bash
-    python bot.py
+    python3 bot.py
     ```
 
-## 🏗️ Deployment
+## Requirements
 
-This bot is ready for deployment on platforms like Render, Railway, or Heroku.
+*   Python 3.7+
+*   `python-telegram-bot`
+*   `pymongo`
+*   `aiohttp`
+*   `dnspython`
 
-**Docker:**
-A `Dockerfile` is included (ensure it copies `bot.py` and `requirements.txt`).
-```bash
-docker build -t xp-bot .
-docker run -p 8080:8080 xp-bot
-```
+## Notes
 
-## 📝 Configuration
-
-The following variables are configured in `bot.py`:
-
-*   `BOT_TOKEN`: Your Telegram Bot API Token.
-*   `MONGODB_URIS`: List of MongoDB connection strings.
-*   `WEB_SERVER_PORT`: Port for the web server (defaults to 8080).
-
-## 📊 Leveling Formula
-
-The XP required to reach the next level is calculated as:
-`XP_Required = (Current_Level^2) * 50 + (Current_Level * 100)`
-
-This ensures a steep progression curve!
+*   The bot uses a **single-file architecture** (`bot.py`) for simplicity.
+*   It is designed to run on platforms like Heroku, Railway, or VPS.
+*   The built-in web server listens on port `8080` (or the `PORT` environment variable).
